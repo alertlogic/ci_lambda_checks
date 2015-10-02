@@ -2,6 +2,7 @@ require('aws-sdk');
 require('zlib');
 var async         = require('async'),
     config        = require('./config.js'),
+    pkg           = require('./package.json'),
     getAssetKey   = require('./utilities/assets.js'),
     publishResult = require('./utilities/publish.js');
 
@@ -80,7 +81,7 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
         timestamp: Math.round(+new Date()/1000),
         asset_id: getAssetKey(awsRegion, resourceType, resourceId),
         environment_id: config.environmentId,
-        scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v0.0.3",
+        scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v" + pkg.version,
         content_type: "application/json" 
     };
 }
