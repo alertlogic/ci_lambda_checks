@@ -1,5 +1,6 @@
 var BitArray       = require('../utilities/bit_array.js'),
     config         = require('../config.js'),
+    pkg            = require('../package.json'),
     sg             = function(rawMessage)  {
     "use strict";
     if (rawMessage.hasOwnProperty('configurationItem') &&
@@ -11,7 +12,7 @@ var BitArray       = require('../utilities/bit_array.js'),
             timestamp: Math.round(+new Date()/1000),
             asset_id: "/aws/" + rawMessage.configurationItem.awsRegion + "/sg/" + rawMessage.configurationItem.resourceId,
             environment_id: config.environmentId,
-            scan_policy_snapshot_id: "sg_policy_scope_v0.0.1",
+            scan_policy_snapshot_id: "sg_policy_scope_v" + pkg.version,
             content_type: "application/json"
         };
         if ( rawMessage.configurationItem.configurationItemStatus === "OK") {

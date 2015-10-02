@@ -1,6 +1,7 @@
 var config            = require('../config.js'),
     getAssetKey       = require('../utilities/assets.js'),
-    naming_convention = function(rawMessage) {
+    pkg               = require('../package.json'),
+    namingConvention = function(rawMessage) {
     "use strict";
 
     if (rawMessage.hasOwnProperty('configurationItem') &&
@@ -11,7 +12,7 @@ var config            = require('../config.js'),
             timestamp: Math.round(+new Date()/1000),
             asset_id: getAssetKey(rawMessage.configurationItem.awsRegion, rawMessage.configurationItem.resourceType, rawMessage.configurationItem.resourceId),
             environment_id: config.environmentId,
-            scan_policy_snapshot_id: "naming_convention_policy_scope_v0.0.1",
+            scan_policy_snapshot_id: "naming_convention_policy_scope_v" + pkg.version,
             content_type: "application/json"
         };
 
@@ -61,4 +62,4 @@ function getResourceName(Tags) {
     return null;
 }
 
-module.exports = naming_convention;
+module.exports = namingConvention;
