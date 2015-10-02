@@ -33,7 +33,6 @@ var publishResult = function(token, metadata, result, callback) {
                 responseString += data;
             });
             res.on('end', function() {
-                console.log(res);
                 if(res.statusCode === 201) {
                     console.log('Vulnerability Instance Id: ' + responseString + '\n');
                 } else {

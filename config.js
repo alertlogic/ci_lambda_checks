@@ -23,7 +23,8 @@ var config = {
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    "api_url": "api.cloudinsight.alertlogic.com",
+    // "api_url": "api.cloudinsight.alertlogic.com",
+    "api_url": "api.product.dev.alertlogic.com",
     /*
      * Cloud Insight Check Configurations
      */
@@ -35,6 +36,9 @@ var config = {
             "name": "sg",
             "enabled": true,
             "configuration": {
+                "resourceTypes": [
+                    "AWS::EC2::SecurityGroup"
+                ],
                 "approved_ports": [
                     443,
                     22
@@ -61,6 +65,9 @@ var config = {
             "name": "namingConvention",
             "enabled": false,
             "configuration": {
+                "resourceTypes": [
+                    "AWS::EC2::Subnet", "AWS::EC2::Instance"
+                ],
                 "conventions": [
                     {
                         "asset_types": ["AWS::EC2::Subnet", "AWS::EC2::Instance"],
