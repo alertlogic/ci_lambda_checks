@@ -57,8 +57,8 @@ var config = {
                 type : "application/json"
             }
         },
-        "naming_convention": {
-            "name": "naming_convention",
+        "namingConvention": {
+            "name": "namingConvention",
             "enabled": false,
             "configuration": {
                 "conventions": [

@@ -23,6 +23,7 @@ var config            = require('../config.js'),
                 return {"vulnerable": true, "metadata": metadata};
             }
         }
+        console.log("Clearing naming convention vulnerability");
         return {"vulnerable": false, "metadata": metadata};
     }
 };

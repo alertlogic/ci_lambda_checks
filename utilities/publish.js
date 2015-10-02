@@ -1,5 +1,5 @@
 var config        = require('../config.js');
-var publishResult = function(token, metadata, result) {
+var publishResult = function(token, metadata, result, callback) {
     "use strict";
         //console.log('{Token: ' + token + '}\n');
         var boundary = "----ea78cfc4b509",
@@ -33,16 +33,19 @@ var publishResult = function(token, metadata, result) {
                 responseString += data;
             });
             res.on('end', function() {
+                console.log(res);
                 if(res.statusCode === 201) {
                     console.log('Vulnerability Instance Id: ' + responseString + '\n');
                 } else {
                     console.log("Failed to create Vulnerability Instance. StatusCode: " + res.statusCode);
                 }
+                callback();
             });
         });
 
         postExposure.on('error', function(e) {
             console.log('problem with request: ' + e.message);
+            callback();
         });
 
         postExposure.write(payload.toString());

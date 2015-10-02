@@ -1,36 +1,38 @@
 require('aws-sdk');
 require('zlib');
-//var async = require('async');
-
-/*
- * Load configuration from config.js
- */
-var config      = require('./config.js'),
-    publish     = require('./utilities/publish.js');
-exports.handler = function(event, context) {
+var async         = require('async'),
+    config        = require('./config.js'),
+    publishResult = require('./utilities/publish.js');
+exports.handler   = function(event, context) {
     "use strict";
     console.log('Received event:', JSON.stringify(event, null, 2));
     var getToken = require('./utilities/token.js');
 
     getToken(function(status, token) {
         if (status === "SUCCESS") {
-            for ( var check in config.checks ) {
-                if (config.checks[check].enabled === true) {
-                    var test = require('./checks/' + check.toString() + '.js');
+            async.each(config.checks, function (check, callback) {
+                if (check.enabled === true) {
+                    console.log("Check '" + check.name.toString() + "' is enabled.");
+                    var test = require('./checks/' + check.name.toString() + '.js');
                     try {
                         var result = test(JSON.parse(event.Records[0].Sns.Message));
                         if ( result !== null ) {
                             if (result.vulnerable === true) {
-                                publish(token, result.metadata, config.checks[check].vulnerability);
+                                // Publish a result against the available metadata
+                                publishResult(token, result.metadata, check.vulnerability, callback);
                             } else {
-                                publish(token, [], config.checks[check].vulnerability);
+                                // Clear a result against the available metadata
+                                publishResult(token, [], check.vulnerability, callback);
                             }
                         }
                     } catch (e) {
-                        console.log("Check '" + check.toString() + "' threw an exception.\nError: " + e.message + "\nStack: " + e.stack);
+                        console.log("Check '" + check.name.toString() + "' threw an exception.\nError: " + e.message + "\nStack: " + e.stack);
                     }
+                } else {
+                    console.log("Check '" + check.name.toString() + "' is disabled.");
                 }
-            }
+                callback();
+            });
         } else {
             console.log("Unable to retreive token, check your credentials.");
         }

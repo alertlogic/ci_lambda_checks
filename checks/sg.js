@@ -21,9 +21,11 @@ var BitArray       = require('../utilities/bit_array.js'),
             }
             var diff = BitArray.getDifference(sgAclEntries, getAllowedPorts()).toNumber();
             if (diff) {
+                console.log("Creating security group vulnerability");
                 return {"vulnerable": true, "metadata": metadata};
             }
         }
+        console.log("Clearing security group vulnerability");
         return {"vulnerable": false, "metadata": metadata};
     }
 };
