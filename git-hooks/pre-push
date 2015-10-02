@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# Pre-push hooks
+
+# Set up term colors
+blue='\033[1;36m'
+green='\033[1;32m'
+red='\033[0;31m'
+white='\033[1;37m'
+yellow='\033[1;33m'
+NC='\033[0m' # No Color
+WHERE_AM_I=`pwd`
+
+# Iterate up the directory structure until we find the root of the ozone repo that we are being executed within
+while [[ $PWD != '/' && ! ( -f "$PWD/package.json" && "$PWD/index.js" ) ]]; do
+    if [[ -d .git && -f .git/ozone-link ]]
+    then
+        cd $(<.git/ozone-link)
+    else
+        cd ..
+    fi
+done
+
+if [ $PWD = '/' ]
+then
+    echo "The root of the current Lambda repository could not be found: \033[1;31mABORTING\033[0m (make sure you run npm hookmeup)"
+    echo "Evaluated from this path: $WHERE_AM_I"
+    exit 1
+fi
+
+if [ ! -f package.json ]
+then
+    echo "The root of your Lambda repository does not actually appear to be an Lambda repository: \033[1;31mABORTING\033[0m"
+    echo "Using Lambda root $PWD derived from origin path $WHERE_AM_I"
+    exit 1
+fi
+local_branch=$(git branch | sed -n -e 's/^\* \(.*\)/\1/p')
+echo "=================================================================="
+echo "Testing local branch \033[1;36m$local_branch\033[0m..."
+echo "=================================================================="
+
+# Lint all code
+npm run lint
+HINTRESULT=$?
+[ $HINTRESULT -ne 0 ] && exit 1
+
+cd $WHERE_AM_I
+
+exit 0
