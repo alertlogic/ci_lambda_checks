@@ -47,4 +47,4 @@ function getResourceName(Tags) {
     return null;
 }
 
-module.exports = naming_convention;
+module.exports = namingConvention;

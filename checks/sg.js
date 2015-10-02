@@ -1,8 +1,8 @@
 var BitArray       = require('../utilities/bit_array.js'),
     config         = require('../config.js'),
+    pkg            = require('../package.json'),
     sg             = function(rawMessage)  {
     "use strict";
-
     if (rawMessage.configurationItem.configurationItemStatus === "OK") {
         var ingressRules = rawMessage.configurationItem.configuration.ipPermissions, sgAclEntries = new BitArray(65535, 0), index;
         for	(index = 0; index < ingressRules.length; index++) {
