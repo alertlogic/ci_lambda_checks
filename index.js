@@ -32,20 +32,21 @@ exports.handler   = function(event, context) {
                         callback();
                         return;
                     }
-
                     console.log("Check '" + check.name.toString() + "' is enabled.");
-                    var test = require('./checks/' + check.name.toString() + '.js');
                     
                     //
                     // Don't do anything if the check isn't applicable to the event's resourceType
                     //
                     if (-1 === check.configuration.resourceTypes.indexOf(resourceType)) {
+                        console.log(
+                            "Skipping execution of the the check '" + check.name.toString() + "'\n" + "event's resourceType: '" + resourceType + "'\n" + "supported resourceTypes: '" + check.configuration.resourceTypes.toString() + "'");
                         callback();
                         return;
                     }
 
                     try {
-                        var metadata = getMetadata(check.name.toString(), awsRegion, resourceType, resourceId);
+                        var test = require('./checks/' + check.name.toString() + '.js'),
+                            metadata = getMetadata(check.name.toString(), awsRegion, resourceType, resourceId);
                         if (test(rawMessage) === true) {
                             // Publish a result against the available metadata
                             publishResult(token, metadata, [check.vulnerability], callback);
@@ -77,7 +78,7 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
     "use strict";
     return {
         scanner: "custom",
-        scanner_scope: "custom" + checkName,
+        scanner_scope: "custom" + checkName.toLowerCase(),
         timestamp: Math.round(+new Date()/1000),
         asset_id: getAssetKey(awsRegion, resourceType, resourceId),
         environment_id: config.environmentId,

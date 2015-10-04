@@ -23,8 +23,7 @@ var config = {
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    // "api_url": "api.cloudinsight.alertlogic.com",
-    "api_url": "api.product.dev.alertlogic.com",
+    "api_url": "api.cloudinsight.alertlogic.com",
     /*
      * Cloud Insight Check Configurations
      */
@@ -63,34 +62,70 @@ var config = {
         },
         "namingConvention": {
             "name": "namingConvention",
-            "enabled": false,
+            "enabled": true,
             "configuration": {
-                "resourceTypes": [
-                    "AWS::EC2::Subnet", "AWS::EC2::Instance"
-                ],
+                /*
+                * Your callback will only be called when message are received for the following AWS resource types
+                */
+                "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"],
                 "conventions": [
                     {
-                        "asset_types": ["AWS::EC2::Subnet", "AWS::EC2::Instance"],
-                        "patterns": ["^[p-P]rod.*", ".*[p-P]rod"],
-                        "case_sensitive": true
+                        "resourceTypes": [
+                            "AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"
+                        ],
+                        "patterns": ["^[pP](rod)*$", ".*[pP](rod)"]
+                        // "patterns": [".*"]
                     }
-                ],
-                "vulnerability": {
-                    id: "custom-002",
-                    name: "Instance Naming Convention Policy Violation",
-                    description: "Instances were found that do not follow naming convention policy.",
-                    remediation: "Change the name of the AWS instance to follow naming convention policy.",
-                    resolution: "Change the name of the AWS instance to follow naming convention policy. To change the name of an AWS instance, set the Name tag to the value that confirms to the naming policy.",
-                    risk: "Medium",
-                    scope: "host",
-                    ccss_score: "3.0",
-                    resolution_type:"Reconfigure Instances",
-                    reference:"http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-instance_linux.html",
-                    pci_concern:"N/A",
-                    ccss_vector: "N/A",
-                    evidence: "{host_configuration,0}",
-                    type : "application/json"
-                }
+                ]
+            },
+            "vulnerability": {
+                id: "custom-002",
+                name: "AWS Resource Naming Convention Policy Violation",
+                description: "AWS Resources were found that do not follow naming convention policy.",
+                remediation: "Change the name of the AWS Resource to follow naming convention policy.",
+                resolution: "Change the name of the AWS Resource to follow naming convention policy. To change the name of an AWS Resource, set the Name tag to the value that confirms to the naming policy.",
+                risk: "Medium",
+                scope: "any",
+                ccss_score: "3.0",
+                resolution_type:"Reconfigure Assets",
+                reference:"http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html",
+                pci_concern:"N/A",
+                ccss_vector: "N/A",
+                evidence: "{sg_configuration,0}",
+                type : "application/json"
+            }
+        },
+        "requiredTags": {
+            "name": "requiredTags",
+            "enabled": true,
+            "configuration": {
+                "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"],
+                "policies": [
+                    {
+                        "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"],
+                        "tags": [
+                            {
+                                "key": "Name" 
+                            }
+                        ]
+                    }
+                ]
+            },
+            "vulnerability": {
+                id: "custom-003",
+                name: "AWS Resource Required Tags Policy Violation",
+                description: "AWS Resources were found that do are not tagged according to resource tagging policy.",
+                remediation: "Add required tags to the AWS Resource to follow resource tagging policy.",
+                resolution: "Add required tags to the AWS Resource to follow resource tagging policy. To add required tags to the AWS Resource, select a resource from the AWS console, go to the tags tab and add requied tags.",
+                risk: "Medium",
+                scope: "any",
+                ccss_score: "3.0",
+                resolution_type:"Reconfigure Assets",
+                reference:"http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html",
+                pci_concern:"N/A",
+                ccss_vector: "N/A",
+                evidence: "{sg_configuration,0}",
+                type : "application/json"
             }
         }
     }
