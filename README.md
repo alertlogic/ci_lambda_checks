@@ -40,17 +40,42 @@ The [NPM](https://www.npmjs.org/) install process that was run earlier installed
 
 ###Creating New Checks  
 Edit ./config.js "checks" key and add the name of your file in the ./checks folder.  
-The new check configuration must have an "enabled" key with true or false, and may have any additional configuration you require.   
-```./checks/sg.js``` is configured in ./config.js "checks" key as the key "sg".  
+The new check configuration must have:  
+- a "name" key with the name of the check  
+- an "enabled" key with true or false, and may have any additional configuration you require  
+- a "configuration" key with at least the "resourceTypes" your check supports  
+- a "vulnerability" key that is the vulnerability to be declared or cleared by Cloud Insight  
+```./checks/sg.js``` is configured in ```./config.js``` "checks" key as the key "sg".  
 ```  
 "sg": {
+    "name": "sg",
     "enabled": true,
     "configuration": {
+        "resourceTypes": [
+            "AWS::EC2::SecurityGroup"
+        ],
         "approved_ports": [
             443,
             22
         ]
+    },
+    "vulnerability": {
+        id: "custom-001",
+        name: "Security Group Ingress Rules Policy Violation",
+        description: "Security groups were found to have rules that allow access to ports not officially approved by the security department.",
+        remediation: "Restrict security group ingress rules to only include approved port ranges.",
+        resolution: "Restrict security group ingress rules to only include approved port ranges. To restrict access to a approved port ranges, set the 'Port Range' field to a range/ranges approved by the security department. Be sure to delete unapproved rules after creating rules that follow official policy.",
+        risk: "High",
+        scope: "security group",
+        ccss_score: "5.4",
+        resolution_type:"Reconfigure Security Groups",
+        reference:"http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/authorizing-access-to-an-instance.html",
+        pci_concern:"N/A",
+        ccss_vector: "N/A",
+        evidence: "{sg_configuration,0}",
+        type : "application/json"
     }
+}
 ```  
 This allows the index.handler to iterate through and execute any checks marked as ```"enabled": true``` to build a custom check library based on your deployment strategy.  
 

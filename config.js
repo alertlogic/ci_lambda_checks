@@ -46,7 +46,7 @@ var config = {
             "vulnerability": {
                 id: "custom-001",
                 name: "Security Group Ingress Rules Policy Violation",
-                description: "Security groups were found to have rules that allow access to ports no officially approved by the security department.",
+                description: "Security groups were found to have rules that allow access to ports not officially approved by the security department.",
                 remediation: "Restrict security group ingress rules to only include approved port ranges.",
                 resolution: "Restrict security group ingress rules to only include approved port ranges. To restrict access to a approved port ranges, set the 'Port Range' field to a range/ranges approved by the security department. Be sure to delete unapproved rules after creating rules that follow official policy.",
                 risk: "High",
@@ -105,7 +105,7 @@ var config = {
                         "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"],
                         "tags": [
                             {
-                                "key": "Name" 
+                                "key": "Name"
                             }
                         ]
                     }
