@@ -1,65 +1,64 @@
 var config            = require('../config.js'),
-    getAssetKey       = require('../utilities/assets.js'),
-    pkg               = require('../package.json'),
     namingConvention = function(rawMessage) {
     "use strict";
 
-    if (rawMessage.hasOwnProperty('configurationItem') &&
-        rawMessage.configurationItem.hasOwnProperty('resourceType')) {
-        var metadata = {
-            scanner: "custom",
-            scanner_scope: "naming_convention_policy_scope",
-            timestamp: Math.round(+new Date()/1000),
-            asset_id: getAssetKey(rawMessage.configurationItem.awsRegion, rawMessage.configurationItem.resourceType, rawMessage.configurationItem.resourceId),
-            environment_id: config.environmentId,
-            scan_policy_snapshot_id: "naming_convention_policy_scope_v" + pkg.version,
-            content_type: "application/json"
-        };
+    if (rawMessage.configurationItem.configurationItemStatus === "OK") {
+        var resourceName = getResourceName(rawMessage.configurationItem.tags),
+            conventions = config.checks.namingConvention.configuration.conventions;
 
-        if (rawMessage.configurationItem.configurationItemStatus === "OK") {
-            var resourceName = getResourceName(rawMessage.configurationItem.tags),
-                conventions = config.checks.naming_convention.configuration.conventions;
-            if (!matchesConventions(rawMessage.configurationItem.resourceType, resourceName, conventions)) {
-                console.log("Creating naming convention vulnerability");
-                return {"vulnerable": true, "metadata": metadata};
-            }
+        if (resourceName == null) {
+            console.log("namingConvention: Resource name is empty.");
+            return false;
         }
-        console.log("Clearing naming convention vulnerability");
-        return {"vulnerable": false, "metadata": metadata};
+
+        if (!matchesConventions(rawMessage.configurationItem.resourceType, resourceName, conventions)) {
+            console.log("namingConvention: Creating naming convention vulnerability");
+            return true;
+        }
     }
+    console.log("namingConvention: Clearing naming convention vulnerability");
+    return false;
 };
 
 function matchesConventions(resourceType, resourceName, conventions) {
     "use strict";
+    console.log("namingConvention: Evaluating: '" + resourceName + "', '" + resourceType + "' Conventions: '" + JSON.stringify(conventions));
     var resourceConventions = conventions.filter(function(convention) {
-        return (convention.asset_types.indexOf(resourceType) >= 0);
+        return (convention.resourceTypes.indexOf(resourceType) >= 0);
     });
 
     if (!resourceConventions.length) {
         return true;
     }
 
-    if (resourceName == null) {
-        return false;
-    }
-
-    for (var convention in resourceConventions) {
-        if (resourceName.match(convention)) {
-            return true;
+    for (var i = 0; i < resourceConventions.length; i++) {
+        if (true === resourceConventions[i].hasOwnProperty("patterns")) {
+            if (match(resourceName, resourceConventions[i].patterns)) {
+                return true;
+            }
         }
     }
     return false;
 }
 
-function getResourceName(Tags) {
+function getResourceName(tags) {
     "use strict";
     // Get the Name tag from the configuration item
-    for (var tag in Tags) {
-        if (tag.key === "Name") {
-            return tag.value;
-        }
+    if (tags.hasOwnProperty("Name")) {
+        return tags.Name;
     }
     return null;
+}
+
+
+function match(resourceName, patterns) {
+    "use strict";
+    for (var i = 0; i < patterns.length; i++) {
+        if (resourceName.match(patterns[i])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 module.exports = namingConvention;
