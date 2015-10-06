@@ -1,8 +1,9 @@
 var config            = require('../config.js'),
     namingConvention = function(rawMessage) {
     "use strict";
-
-    if (rawMessage.configurationItem.configurationItemStatus === "OK") {
+    
+    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
+        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
         var resourceName = getResourceName(rawMessage.configurationItem.tags),
             conventions = config.checks.namingConvention.configuration.conventions;
 

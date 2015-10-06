@@ -1,7 +1,8 @@
 var config            = require('../config.js'),
     requiredTags      = function(rawMessage) {
     "use strict";
-    if (rawMessage.configurationItem.configurationItemStatus === "OK") {
+    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
+        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
         /*
         * Only evaluate policies applicable to the resource type specified in the event.
         */
