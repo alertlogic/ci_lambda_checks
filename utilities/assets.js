@@ -1,3 +1,6 @@
+/*
+ * This should probably support all known asset types using a dictionary.
+ */
 var getAssetKey = function(awsRegion, resourceType, resourceId) {
     "use strict";
     var assetType;
@@ -26,4 +29,3 @@ var getAssetKey = function(awsRegion, resourceType, resourceId) {
 };
 
 module.exports = getAssetKey;
-

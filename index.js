@@ -23,13 +23,13 @@ exports.handler = function(event, context) {
                 * Process all configration items in stored in S3 object
                 */
                 processConfigurationItem(
-                    token, 
+                    token,
                     function() {
                         return context.succeed();
                     },
                     rawMessage);
-                
-            } else if (rawMessage.hasOwnProperty('messageType') && 
+
+            } else if (rawMessage.hasOwnProperty('messageType') &&
                        rawMessage.messageType === 'ConfigurationSnapshotDeliveryCompleted') {
                 /*
                 * Process all configration items in stored in S3 object
@@ -58,7 +58,7 @@ function processPeriodicSnapshot(token, context, rawMessage, awsRegion) {
         function download(callback) {
             s3.getObject({
                 Bucket: rawMessage.s3Bucket,
-                Key: rawMessage.s3ObjectKey 
+                Key: rawMessage.s3ObjectKey
             }, function(err, data) {
                 callback(err, data);
             });
@@ -73,15 +73,15 @@ function processPeriodicSnapshot(token, context, rawMessage, awsRegion) {
             require('async').each(JSON.parse(data.toString('utf8'), null, 2).configurationItems,
                 function (item, callback) {
                     var rawMessage = {
-                        configurationItem: item 
+                        configurationItem: item
                     };
                     processConfigurationItem(
-                        token, 
+                        token,
                         function() {
                             return callback();
                         },
                         rawMessage);
-                }, 
+                },
                 function(err) {
                     console.log("Finished processing configuration items");
                     context.succeed();
@@ -104,14 +104,14 @@ function processConfigurationItem(token, completeCallback, rawMessage) {
 
     async.each(config.checks, function (check, callback) {
         if (check.enabled === true) {
-            
+
             if (!isCheckNameValid(check.name.toString())) {
                 console.log("Invalid check name. Use only alphanumeric values. Check name: " + check.name.toString());
                 callback();
                 return;
             }
             console.log("Check '" + check.name.toString() + "' is enabled.");
-            
+
             //
             // Don't do anything if the check isn't applicable to the event's resourceType
             //
@@ -156,7 +156,7 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
         asset_id: getAssetKey(awsRegion, resourceType, resourceId),
         environment_id: config.environmentId,
         scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v" + pkg.version,
-        content_type: "application/json" 
+        content_type: "application/json"
     };
 }
 
@@ -175,9 +175,8 @@ function getAwsRegionFromArn(arn) {
 
 function getS3Endpoint(region) {
     "use strict";
-    if (region === 'us-east-1') { 
+    if (region === 'us-east-1') {
             return 's3.amazonaws.com';
     }
     return 's3-' + region + '.amazonaws.com';
 }
-

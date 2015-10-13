@@ -1,16 +1,23 @@
 /*
  * Build dependencies and configuration
  */
-var fs            = require('fs');
-var glob          = require('glob-all');
-var mkdirp        = require('mkdirp');
-var path          = require('path');
-var uglifyjs      = require('uglify-js');
-var prompt        = require('prompt');
-var pkg           = require('../package.json');
-
-var base   = pkg.folders.jsSource;
-var deploy = pkg.folders.build + pkg.name + '/';
+var fs                = require('fs'),
+    glob              = require('glob-all'),
+    mkdirp            = require('mkdirp'),
+    path              = require('path'),
+    uglifyjs          = require('uglify-js'),
+    prompt            = require('prompt'),
+    async             = require('async'),
+    AWS               = require('aws-sdk'),
+    config            = require('../config.js'),
+    getToken          = require('../utilities/token.js'),
+    getSources        = require('../utilities/sources.js'),
+    getRegionsInScope = require('../utilities/regions.js'),
+    pkg               = require('../package.json'),
+    base              = pkg.folders.jsSource,
+    deploy            = pkg.folders.build + pkg.name + '/',
+    new_config        = '',
+    execfile          = require('child_process').execFile;
 
 console.log('> Building: ' + deploy);
 
@@ -68,23 +75,24 @@ for ( var section in source ) {
 }
 
 /*
+ * Let's fix this to actually use the users credentials to promprt the proper selections using CI.
+ * Let's also use aws-sdk to automatically publish the resulting checks to the right region
+ */
+
+/*
  * Update the config.js file with proper information if anything is empty
  */
-var config     = require('../config.js'),
-    updated    = false,
-    properties = [],
-    required   = {
-        "accountId": "",
-        "identifier": "",
-        "secret": "",
-        "environmentId": "",
-        "api_url": ""
-    };
-
 function onErr(err) {
-    console.error(err);
+    console.error("Error: " + err);
     return 1;
 }
+
+var updated    = false,
+    properties = [],
+    callback   = function() {},
+    required   = {
+        "api_url": ""
+    };
 
 for ( var requirement in required ) {
     var value = config[requirement];
@@ -103,11 +111,93 @@ if (properties.length > 0) {
         for ( var key in result ) {
             config[key] = result[key];
         };
-        var new_config = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
-        fs.writeFile(deploy + 'config.js', new_config, function(err) {
-            if(err) {
-                return onErr(err);
-            }
-        });
     });
 }
+
+var ciLogin = [
+    {"name": "identifier"},
+    {"name": "secret"}
+];
+
+console.log("Please sign in to Cloud Insight so that we can integrate with your environments.");
+prompt.start();
+prompt.get(ciLogin, function (err, result) {
+    if (err) { return onErr(err); }
+    for ( var key in result ) {
+        config[key] = result[key];
+    };
+
+    var token = getToken(function(status, token) {
+        if ( status === "SUCCESS" ) {
+            var environmentList = getSources(token, function(status, environments) {
+                if ( status === "SUCCESS" ) {
+                    async.each(
+                        environments.sources,
+                        function(source, callback) {
+                            var name = source.source.name,
+                                id   = source.source.id;
+
+                            config.environmentId = id;
+
+                            new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
+                            var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + name + '-' + config.environmentId + '-' + pkg.version + '.zip';
+
+                            fs.writeFile(deploy + 'config.js', new_config, function(err) {
+                                process.chdir('target');
+                                process.chdir('ci_lambda_checks');
+                                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
+                                // This will help us deploy to all regions the customer has in scope per environment
+                                deployList = [];
+                                process.chdir('../../');
+                                if(err) {
+                                    return onErr(err);
+                                }
+                            });
+
+                            var regionList = getRegionsInScope(token, id, function(status, regions) {
+                                if ( status === "SUCCESS" ) {
+                                    var deployTo = {
+                                        "environment": {
+                                            "name": name,
+                                            "id": id,
+                                            "regions": []
+                                        }
+                                    };
+                                    async.each(
+                                        regions.assets,
+                                        function(region, callback) {
+                                            for (var row in region) {
+                                                var target = region[row].key.split('/')[2];
+                                                if ( config.supported.indexOf(target) > -1 ) {
+                                                    deployTo.environment.regions.push(target);
+                                                }
+                                            }
+                                            callback();
+                                        },
+                                        function(err){
+                                            // Just ignore this, it's screwy assets empty rows.
+                                        }
+                                    );
+                                    // Now we can deploy, YAY!
+                                    if (deployTo.environment.regions.length > 0) {
+                                        console.log('ci_lambda_checks-' + config.accountId + '-' + name + '-' + id + '-' + pkg.version + '.zip should be deployed to the following regions that are in scope for the environment named ' + name + '.');
+                                        console.log(deployTo);
+                                    }
+                                } else {
+                                    return onErr(err);
+                                }
+                            });
+                        },
+                        function(err){
+                            return onErr(err);
+                        }
+                    );
+                } else {
+                    return onErr(err);
+                }
+            });
+        } else {
+            return onErr(err);
+        }
+    });
+});

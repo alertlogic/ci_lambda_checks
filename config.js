@@ -3,27 +3,20 @@
  */
 var config = {
     /*
-     * Cloud Insight Customer ID
-     */
-    "accountId": "",
-    /*
-     * Cloud Insight username
-     */
-    "identifier": "",
-    /*
-     * Cloud Insight password
-     */
-    "secret": "",
-    /*
-     * Cloud Insight Environment ID
-     */
-    "environmentId": "",
-    /*
      * Cloud Insight API URL
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    "api_url": "api.cloudinsight.alertlogic.com",
+    "api_url": "api.product.dev.alertlogic.com",
+    /*
+     * Supported Regions for AWS Lambda
+     */
+    "supported": [
+        'us-east-1',
+        'us-west-2',
+        'eu-west-1',
+        'ap-northeast-1'
+    ],
     /*
      * Cloud Insight Check Configurations
      */
