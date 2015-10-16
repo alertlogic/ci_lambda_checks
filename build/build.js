@@ -160,6 +160,7 @@ prompt.get(ciLogin, function (err, result) {
                                         "environment": {
                                             "name": name,
                                             "id": id,
+                                            "file": 'ci_lambda_checks-' + config.accountId + '-' + name + '-' + id + '-' + pkg.version + '.zip',
                                             "regions": []
                                         }
                                     };
@@ -180,7 +181,6 @@ prompt.get(ciLogin, function (err, result) {
                                     );
                                     // Now we can deploy, YAY!
                                     if (deployTo.environment.regions.length > 0) {
-                                        console.log('ci_lambda_checks-' + config.accountId + '-' + name + '-' + id + '-' + pkg.version + '.zip should be deployed to the following regions that are in scope for the environment named ' + name + '.');
                                         console.log(deployTo);
                                     }
                                 } else {
