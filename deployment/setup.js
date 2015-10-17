@@ -23,7 +23,7 @@ var deploy = function(environments) {
     function(err) {
         console.log("Finished deploying custom checks.");
     });
-}
+};
 
 function deployEnvironment(config, resultCallback) {
     "use strict";
