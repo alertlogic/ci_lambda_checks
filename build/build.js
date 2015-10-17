@@ -14,6 +14,7 @@ var fs                = require('fs'),
     sources           = require('../utilities/sources.js'),
     getRegionsInScope = require('../utilities/regions.js'),
     pkg               = require('../package.json'),
+    setup             = require('../deployment/setup.js'),
     base              = pkg.folders.jsSource,
     deploy            = pkg.folders.build + pkg.name + '/',
     new_config        = '',
@@ -31,7 +32,8 @@ var source = {
         '!' + base + 'git-hooks/**',
         '!' + base + 'node_modules/**',
         '!' + base + 'target/**',
-        '!' + base + 'utility/**'
+        '!' + base + 'utility/**',
+        '!' + base + 'deployment/**'
     ],
     "config": [
         base + 'package.json'
@@ -190,7 +192,7 @@ prompt.get(ciLogin, function (err, result) {
                                                 );
                                                 // Now we can deploy, YAY!
                                                 if (deployTo.environment.regions.length > 0) {
-                                                    console.log(deployTo);
+                                                    setup([deployTo]);
                                                 }
                                             } else {
                                                 return onErr(err);

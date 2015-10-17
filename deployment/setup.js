@@ -14,26 +14,10 @@ var async           = require('async'),
     // awsRegions      = ['us-east-1', 'us-west-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'sa-east-1'],
 
 var defaultLambdaRoleName   = 'cloudinsight_custom_checks_lambda_role',
-    customChecksLambdaPkg   = '../target/ci_lambda_checks-67000001-C2D1E00F-4130-4022-A1C7-AC65F6EDED7F-0.0.3.zip',
     defaultFunctionName     = 'ci_custom_checks',
     defaultHandlerName      = 'index.handler';
-    
 
-var Environments = [
-    {
-        account: { awsAccountId: '481746159046', id: '67000001' },
-        environment:
-        {
-            name: 'pavels_test',
-            id: '0D7F7D05-1BAF-4FB7-89F1-F9511CAB0CE2',
-            file: 'ci_lambda_checks-67000001-C2D1E00F-4130-4022-A1C7-AC65F6EDED7F-0.0.3.zip',
-            regions: [ 'us-west-2', 'us-east-1' ]
-        }
-}];
-
-deploy(Environments);
-
-function deploy(environments) {
+var deploy = function(environments) {
     "use strict";
     async.each(environments, deployEnvironment,
     function(err) {
@@ -54,7 +38,7 @@ function deployEnvironment(config, resultCallback) {
 
     awsRegions.reverse();
     async.forEachOf(environment.regions.filter(isSupportedRegion), function(regionName, _index, callback) {
-        deployRegion(regionName, account, logger, function(err) {
+        deployRegion(regionName, account, environment, logger, function(err) {
                 return callback(err);
         });
     },
@@ -70,7 +54,7 @@ function deployEnvironment(config, resultCallback) {
     });
 }
 
-function deployRegion(regionName, account, logger, callback) {
+function deployRegion(regionName, account, environment, logger, callback) {
     "use strict";
     var AWS             = require('aws-sdk');
     AWS.config.loadFromPath('./aws_config.json');
@@ -82,15 +66,15 @@ function deployRegion(regionName, account, logger, callback) {
             accountId: account.awsAccountId,
             supportedRegions: awsRegions,
             lambda: {
-                functionName:   defaultFunctionName, 
+                functionName:   defaultFunctionName,
                 roleName:       defaultLambdaRoleName,
                 handler:        defaultHandlerName,
                 runtime:        'nodejs',
                 timeout:        300,
                 zipFile: require('fs').readFileSync(
                             require('path').resolve(
-                                __dirname, 
-                                customChecksLambdaPkg))
+                                __dirname,
+                                '../target/' + environment.file))
             },
             logger: function(msg) {
                 logger("[region: " + regionName + "] " + msg);
@@ -117,7 +101,7 @@ function deployRegion(regionName, account, logger, callback) {
                     "AWS Config setup and CloudInsight custom checks lambda function deployment completed.");
                 return callback();
             }
-    }); 
+    });
 }
 
 function isSupportedRegion(regionName) {
@@ -128,3 +112,4 @@ function isSupportedRegion(regionName) {
     return true;
 }
 
+module.exports = deploy;
