@@ -1,15 +1,21 @@
-var config   = require('../config.js');
-var getToken = function(callback) {
+var config            = require('../config.js'),
+    getRegionsInScope = function(token, environmentId, callback) {
     "use strict";
+
+    if ( !config.hasOwnProperty('accountId') ||
+         config.accountId === "" ) {
+        config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
+    }
 
     var https   = require('https'),
         options = {
             hostname: config.api_url,
             port: 443,
-            path: '/aims/v1/authenticate',
-            method: 'POST',
-            headers: {},
-            auth: config.identifier + ':' + config.secret
+            path: '/assets/v1/' + config.accountId + '/environments/' + environmentId + '/assets?asset_types=region&scope=true',
+            method: 'GET',
+            headers: {
+                "x-aims-auth-token": token
+            }
         },
         req     = https.request(options, function(res){
             res.setEncoding('utf-8');
@@ -22,7 +28,7 @@ var getToken = function(callback) {
             res.on('end', function() {
                 if (res.statusCode === 200) {
                     var json = JSON.parse(responseString);
-                    callback("SUCCESS", json.authentication.token);
+                    callback("SUCCESS", json);
                 } else {
                     callback("FAILED", res.statusCode);
                 }
@@ -36,4 +42,4 @@ var getToken = function(callback) {
     req.end();
 };
 
-module.exports = getToken;
+module.exports = getRegionsInScope;
