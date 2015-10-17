@@ -7,7 +7,8 @@ var config = {
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    "api_url": "api.product.dev.alertlogic.com",
+    "api_url": "api.cloudinsight.alertlogic.com",
+
     /*
      * Supported Regions for AWS Lambda
      */
@@ -17,6 +18,7 @@ var config = {
         'eu-west-1',
         'ap-northeast-1'
     ],
+
     /*
      * Cloud Insight Check Configurations
      */
