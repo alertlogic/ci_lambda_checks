@@ -23,7 +23,7 @@ var config = {
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    "api_url": "api.cloudinsight.alertlogic.com",
+    "api_url": "api.product.dev.alertlogic.com",
     /*
      * Cloud Insight Check Configurations
      */
