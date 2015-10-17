@@ -46,6 +46,47 @@ var https   = require('https'),
         req.end();
     },
     /*
+     * Fetches a set of items from a service based on filters
+     */
+    getMany = function(token, service, endpoint, id, query, callback) {
+        "use strict";
+        var accountId = getAccountId(token),
+            result    = parseQueryString(query),
+            options   = {
+                hostname: config.api_url,
+                port: 443,
+                path: '/' + service + '/' + version + '/' + accountId + '/' + endpoint + '/' + id + '/' + service + result,
+                method: 'GET',
+                headers: {
+                    "user-agent": client,
+                    "x-aims-auth-token": token
+                }
+            },
+            req       = https.request(options, function(res){
+                res.setEncoding('utf-8');
+                var responseString = '';
+
+                res.on('data', function(data) {
+                    responseString += data;
+                });
+
+                res.on('end', function() {
+                    if (res.statusCode === 200) {
+                        var json = JSON.parse(responseString);
+                        callback("SUCCESS", json);
+                    } else {
+                        callback("FAILED", res.statusCode);
+                    }
+                });
+            });
+
+        req.on('error', function(e) {
+            console.log('Call to ' + service + ' for ' + endpoint + ' failed because:\n' + e.message);
+            callback("FAILED", e.message);
+        });
+        req.end();
+    },
+    /*
      * Fetches any set of items from a service
      */
     getAll = function(token, service, endpoint, query, callback) {
@@ -106,7 +147,11 @@ function parseQueryString(query) {
     "use strict";
     var result = '';
     for (var index in query) {
-        result = (result === '') ? index + '=' + query[index] : '&' + index + '=' + query[index];
+        if (result === '') {
+            result = result + index + '=' + query[index];
+        } else {
+            result = result + '&' + index + '=' + query[index];
+        }
     }
     return (result === '') ? '' : '?' + result;
 }
@@ -116,5 +161,6 @@ function parseQueryString(query) {
  */
 module.exports = {
     "getOne": getOne,
+    "getMany": getMany,
     "getAll": getAll
 };
