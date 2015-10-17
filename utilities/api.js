@@ -1,3 +1,5 @@
+/* exported api */
+/*jshint -W089 */
 var https   = require('https'),
     config  = require('../config.js'),
     api     = require('./api.js'),
@@ -12,7 +14,7 @@ var https   = require('https'),
             options   = {
                 hostname: config.api_url,
                 port: 443,
-                path: '/' + service + '/' + version + '/' + config.accountId + '/' + endpoint +'/' + id,
+                path: '/' + service + '/' + version + '/' + accountId + '/' + endpoint +'/' + id,
                 method: 'GET',
                 headers: {
                     "user-agent": client,
@@ -48,13 +50,12 @@ var https   = require('https'),
      */
     getAll = function(token, service, endpoint, query, callback) {
         "use strict";
-
         var accountId = getAccountId(token),
             result    = parseQueryString(query),
             options   = {
                 hostname: config.api_url,
                 port: 443,
-                path: '/' + service + '/' + version + '/' + config.accountId + '/' + endpoint + result,
+                path: '/' + service + '/' + version + '/' + accountId + '/' + endpoint + result,
                 method: 'GET',
                 headers: {
                     "user-agent": client,
@@ -90,6 +91,7 @@ var https   = require('https'),
  * Parses a Cloud Insight token to find the account id
  */
 function getAccountId(token) {
+    "use strict";
     if ( !config.hasOwnProperty('accountId') ||
          config.accountId === "" ) {
         config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
@@ -101,6 +103,7 @@ function getAccountId(token) {
  * Turns an object of key value pairs into an http query string
  */
 function parseQueryString(query) {
+    "use strict";
     var result = '';
     for (var index in query) {
         result = (result === '') ? index + '=' + query[index] : '&' + index + '=' + query[index];
