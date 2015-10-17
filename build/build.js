@@ -11,7 +11,7 @@ var fs                = require('fs'),
     AWS               = require('aws-sdk'),
     config            = require('../config.js'),
     getToken          = require('../utilities/token.js'),
-    getSources        = require('../utilities/sources.js'),
+    sources           = require('../utilities/sources.js'),
     getRegionsInScope = require('../utilities/regions.js'),
     pkg               = require('../package.json'),
     base              = pkg.folders.jsSource,
@@ -129,68 +129,77 @@ prompt.get(ciLogin, function (err, result) {
 
     var token = getToken(function(status, token) {
         if ( status === "SUCCESS" ) {
-            var environmentList = getSources(token, function(status, environments) {
+            var environmentList = sources.getSources(token, function(status, environments) {
                 if ( status === "SUCCESS" ) {
                     async.each(
                         environments.sources,
                         function(source, callback) {
-                            var name = source.source.name,
-                                id   = source.source.id;
 
-                            config.environmentId = id;
+                            var name  = source.source.name,
+                                id    = source.source.id,
+                                creds = sources.getCredential(token, source.source.config.aws.credential.id, function(status, credential) {
+                                    if ( status === "SUCCESS" ) {
 
-                            new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
-                            var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + name + '-' + config.environmentId + '-' + pkg.version + '.zip';
+                                        var awsAccountId = credential.credential.iam_role.arn.split(":")[4];
 
-                            fs.writeFile(deploy + 'config.js', new_config, function(err) {
-                                process.chdir('target');
-                                process.chdir('ci_lambda_checks');
-                                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
-                                // This will help us deploy to all regions the customer has in scope per environment
-                                deployList = [];
-                                process.chdir('../../');
-                                if(err) {
-                                    return onErr(err);
-                                }
-                            });
+                                        config.environmentId = id;
 
-                            var regionList = getRegionsInScope(token, id, function(status, regions) {
-                                if ( status === "SUCCESS" ) {
-                                    var deployTo = {
-                                        "account": {
-                                            "awsAccountId": "",
-                                            "id": config.accountId
-                                        },
-                                        "environment": {
-                                            "name": name,
-                                            "id": id,
-                                            "file": 'ci_lambda_checks-' + config.accountId + '-' + name + '-' + id + '-' + pkg.version + '.zip',
-                                            "regions": []
-                                        }
-                                    };
-                                    async.each(
-                                        regions.assets,
-                                        function(region, callback) {
-                                            for (var row in region) {
-                                                var target = region[row].key.split('/')[2];
-                                                if ( config.supported.indexOf(target) > -1 ) {
-                                                    deployTo.environment.regions.push(target);
-                                                }
+                                        new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
+                                        var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + name + '-' + config.environmentId + '-' + pkg.version + '.zip';
+
+                                        fs.writeFile(deploy + 'config.js', new_config, function(err) {
+                                            process.chdir('target');
+                                            process.chdir('ci_lambda_checks');
+                                            execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
+                                            // This will help us deploy to all regions the customer has in scope per environment
+                                            deployList = [];
+                                            process.chdir('../../');
+                                            if(err) {
+                                                return onErr(err);
                                             }
-                                            callback();
-                                        },
-                                        function(err){
-                                            // Just ignore this, it's screwy assets empty rows.
-                                        }
-                                    );
-                                    // Now we can deploy, YAY!
-                                    if (deployTo.environment.regions.length > 0) {
-                                        console.log(deployTo);
+                                        });
+
+                                        var regionList = getRegionsInScope(token, id, function(status, regions) {
+                                            if ( status === "SUCCESS" ) {
+                                                var deployTo = {
+                                                    "account": {
+                                                        "awsAccountId": awsAccountId,
+                                                        "id": config.accountId
+                                                    },
+                                                    "environment": {
+                                                        "name": name,
+                                                        "id": id,
+                                                        "file": 'ci_lambda_checks-' + config.accountId + '-' + name + '-' + id + '-' + pkg.version + '.zip',
+                                                        "regions": []
+                                                    }
+                                                };
+                                                async.each(
+                                                    regions.assets,
+                                                    function(region, callback) {
+                                                        for (var row in region) {
+                                                            var target = region[row].key.split('/')[2];
+                                                            if ( config.supported.indexOf(target) > -1 ) {
+                                                                deployTo.environment.regions.push(target);
+                                                            }
+                                                        }
+                                                        callback();
+                                                    },
+                                                    function(err){
+                                                        // Just ignore this, it's screwy assets empty rows.
+                                                    }
+                                                );
+                                                // Now we can deploy, YAY!
+                                                if (deployTo.environment.regions.length > 0) {
+                                                    console.log(deployTo);
+                                                }
+                                            } else {
+                                                return onErr(err);
+                                            }
+                                        });
+                                    } else {
+                                        return onErr(err);
                                     }
-                                } else {
-                                    return onErr(err);
-                                }
-                            });
+                                });
                         },
                         function(err){
                             return onErr(err);
