@@ -21,13 +21,14 @@ var setupConfigRole = function(setupData, resultCallback) {
      * if the role exists, make sure to add our policy to it,
      * otherwise create AWS Config role and add our policy to it.
      */
-    var logger  = setupData.logger,
-        roleName = null;
+    var roleName = null;
 
-    if (setupData.configurationRecorders.length)
+    if (setupData.configurationRecorders.length) {
         roleName = getRoleNameFromArn(setupData.configurationRecorders[0].roleARN);
-    else
+    } else {
         roleName = defaultConfigRoleName;
+    }
+
     setupRole(setupData, roleName, "config.amazonaws.com", getConfigPoilicies(setupData), function(err, result) {
         setupData.configurationRecorders[0].roleARN = result;
         resultCallback(null, setupData); 
@@ -41,12 +42,11 @@ var setupLambdaRole = function(setupData, resultCallback) {
         setupData.lambda.roleArn = result;
         resultCallback(null, setupData); 
     });
-}
+};
 
 function setupRole(setupData, roleName, serviceName, policies, resultCallback) {
     "use strict";
-    var AWS = setupData.aws,
-        logger = setupData.logger;
+    var logger = setupData.logger;
 
     async.waterfall([
         function(callback) {
@@ -62,8 +62,11 @@ function setupRole(setupData, roleName, serviceName, policies, resultCallback) {
              * Setup role policies
              */
             addRolePolicies(setupData, roleName, policies, function(err) {
-                if (err) return callback(err);
-                return callback(null, roleArn);
+                if (err) {
+                    return callback(err);
+                } else {
+                    return callback(null, roleArn);
+                }
             });
         }
     ],  function(err, result) {
@@ -133,8 +136,8 @@ function addRolePolicies(setupData, roleName, policies, resultCallback) {
         };
         iam.putRolePolicy(params, function(err, data) {
             if (err) {
-                logger("putRolePolicy failed for '" 
-                            + policy.name + "' policy. Role: '" + roleName + "'. Error: " + err);
+                logger("putRolePolicy failed for '" +
+                       policy.name + "' policy. Role: '" + roleName + "'. Error: " + err);
                 return callback(err);
             } else {
                 /*
@@ -146,17 +149,21 @@ function addRolePolicies(setupData, roleName, policies, resultCallback) {
             }
         });
     }, function(err) {
-        if (err) return resultCallback(err);
-
-        return resultCallback(null);
+        if (err) {
+            return resultCallback(err);
+        } else {
+            return resultCallback(null);
+        }
     });
 }
 
 function getRoleNameFromArn(roleArn) {
+    "use strict";
     return roleArn.substr(roleArn.indexOf('/') + 1);
 }
 
 function getConfigPoilicies(setupData) {
+    "use strict";
     var rolePolicyDocument = {
         "Version": "2012-10-17",
         "Statement": [
@@ -266,6 +273,7 @@ function getConfigPoilicies(setupData) {
 }
 
 function getLambdaPolicies() {
+    "use strict";
     return [
         {
             name: "basic_lambda_execution_policy",
@@ -305,6 +313,7 @@ function getLambdaPolicies() {
 }
 
 function getRegionSnsStatement(accountId, region) {
+    "use strict";
     return {
       "Effect": "Allow",
       "Action": "sns:Publish",
@@ -313,6 +322,7 @@ function getRegionSnsStatement(accountId, region) {
 }
 
 function getAssumeRolePolicyDocument(serviceName) {
+    "use strict";
     assumeRolePolicyDocument.Statement[0].Principal.Service = serviceName;
     return JSON.stringify(assumeRolePolicyDocument);
 }

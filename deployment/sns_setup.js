@@ -1,5 +1,4 @@
-var async               = require('async'),
-    defaultTopicName    = 'config-topic';
+var defaultTopicName    = 'config-topic';
 
 var getSNSTopic = function(setupData, resultCallback) {
     "use strict";
@@ -28,16 +27,14 @@ function validateTopic(setupData, callback) {
 
     sns.getTopicAttributes({TopicArn: topicArn}, function(err, data) {
         if (err) {
-            logger(setupData.setupRegion + ": "
-                        + "getTopicAttributes failed for '" + topicArn + "'. Error: " + err);
+            logger("getTopicAttributes failed for '" + topicArn + "'. Error: " + err);
             return callback(err);
         } else {
-            logger(setupData.setupRegion + ": "
-                        + "Confirmed that SNS topic '" + topicArn + "' exists.");
+            logger("Confirmed that SNS topic '" + topicArn + "' exists.");
             return callback(null, setupData);
         }
     });
-};
+}
 
 function createTopic(setupData, callback) {
     "use strict";
@@ -50,13 +47,11 @@ function createTopic(setupData, callback) {
     
     sns.createTopic({Name: defaultTopicName}, function(err, data) {
         if (err) {  
-            logger(setupData.setupRegion + ": "
-                        + "createTopic failed for '" + defaultTopicName + "'. Error: " + err);
+            logger("createTopic failed for '" + defaultTopicName + "'. Error: " + err);
             return callback(err);
         } else {
             setupData.deliveryChannels[0].snsTopicARN = data.TopicArn;
-            logger(setupData.setupRegion + ": "
-                        + "Successfully created '" + data.TopicArn + "' topic.");
+            logger("Successfully created '" + data.TopicArn + "' topic.");
             return callback(null, setupData);
         }
     });
@@ -77,14 +72,12 @@ function subscribe(setupData, callback) {
 
     sns.subscribe(params, function(err, data) {
         if (err) {
-            logger(setupData.setupRegion + ": "
-                        + "Failed to subscribe lambda function '" + params.Endpoint
-                        + "' to topic '" + params.TopicArn + "'. Error: " + JSON.stringify(err));
+            logger("Failed to subscribe lambda function '" + params.Endpoint +
+                    "' to topic '" + params.TopicArn + "'. Error: " + JSON.stringify(err));
             return callback(err);
         } else {
-            logger(setupData.setupRegion + ": "
-                        + "Successfully subscribed lambda function '" + params.Endpoint
-                        + "' to topic '" + params.TopicArn + "'.");
+            logger("Successfully subscribed lambda function '" + params.Endpoint +
+                    "' to topic '" + params.TopicArn + "'.");
             return callback(null, setupData);
         }
     });

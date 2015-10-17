@@ -3,15 +3,18 @@ var s3bucketPrefix      = 'config-bucket-';
 function getS3Bucket(setupData, resultCallback) {
     "use strict";
     var s3Endpoint  = getS3Endpoint(setupData.region),
-        logger      = setupData.logger;
+        logger      = setupData.logger,
+        bucketName  = "",
+        s3;
+
     if (setupData.setupRegion !== setupData.region ||
         (setupData.deliveryChannels.length && setupData.deliveryChannels[0].s3BucketName.length) ) {
         /*
          * Configuration contained in the setupData is for another region then the one we are trying to setup.
          * Validate that the bucket indeed exists and use existing bucket for our region's AWS Config
          */
-        var bucketName  = setupData.deliveryChannels[0].s3BucketName,
-            s3          = new setupData.aws.S3({endpoint: s3Endpoint, apiVersion: '2006-03-01'});
+        bucketName  = setupData.deliveryChannels[0].s3BucketName;
+        s3          = new setupData.aws.S3({endpoint: s3Endpoint, apiVersion: '2006-03-01'});
         s3.getBucketLocation({Bucket: bucketName}, function (err, data) {
             if (err) {
                 logger("getBucketLocation failed for bucket '" + bucketName + "', region '" + setupData.region + "'. Error: " + err);
@@ -25,8 +28,8 @@ function getS3Bucket(setupData, resultCallback) {
         /* 
          * Setup new bucket
          */
-        var bucketName  = s3bucketPrefix + setupData.accountId,
-            s3          = new setupData.aws.S3({apiVersion: '2006-03-01'});
+        bucketName  = s3bucketPrefix + setupData.accountId;
+        s3          = new setupData.aws.S3({apiVersion: '2006-03-01'});
 
         setupData.deliveryChannels = [{name: "default", 
                                        s3BucketName: bucketName}];
@@ -46,7 +49,7 @@ function getS3Bucket(setupData, resultCallback) {
             }
         });
     }
-};
+}
 
 function getS3Endpoint(region) {
     "use strict";

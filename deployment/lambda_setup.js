@@ -1,5 +1,3 @@
-var async               = require('async');
-
 var setupLambda = function(setupData, resultCallback) {
     "use strict";
     var AWS     = setupData.aws,
@@ -26,13 +24,13 @@ var setupLambda = function(setupData, resultCallback) {
                      */
                     return uploadLambdaCode(lambda, setupData, resultCallback);
                 default:
-                    logger("Failed to create '" + setupData.lambda.functionName + "' lambda function."
-                                + " Error: " + JSON.stringify(err));
+                    logger("Failed to create '" + setupData.lambda.functionName + "' lambda function." +
+                            " Error: " + JSON.stringify(err));
                     return resultCallback(err);
             }
         } else {
-            logger("Successfully created '" + setupData.lambda.functionName + "' lambda function. "
-                        + "Arn: " + data.FunctionArn);
+            logger("Successfully created '" + setupData.lambda.functionName + "' lambda function. " +
+                    "Arn: " + data.FunctionArn);
             setupData.lambda.functionArn = data.FunctionArn;
             return resultCallback(null, setupData);
         }
@@ -40,6 +38,7 @@ var setupLambda = function(setupData, resultCallback) {
 };
 
 function uploadLambdaCode(lambda, setupData, resultCallback) {
+    "use strict";
     var params = {
             FunctionName:   setupData.lambda.functionName, 
             ZipFile:        setupData.lambda.zipFile 
@@ -48,12 +47,12 @@ function uploadLambdaCode(lambda, setupData, resultCallback) {
     
     lambda.updateFunctionCode(params, function(err, data) {
         if (err) {
-            logger("Failed to update function code for '" + setupData.lambda.functionName + "' lambda function."
-                        + " Error: " + JSON.stringify(err));
+            logger("Failed to update function code for '" + setupData.lambda.functionName + "' lambda function." +
+                    " Error: " + JSON.stringify(err));
             return resultCallback(err);
         } else {
-            logger("Successfully uploaded '" + setupData.lambda.functionName + "' lambda function code. "
-                        + "Arn: " + data.FunctionArn);
+            logger("Successfully uploaded '" + setupData.lambda.functionName + "' lambda function code. " +
+                   "Arn: " + data.FunctionArn);
             setupData.lambda.functionArn = data.FunctionArn;
             return resultCallback(null, setupData);
         }
