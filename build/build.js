@@ -157,6 +157,10 @@ prompt.get(ciLogin, function (err, result) {
                             var regionList = getRegionsInScope(token, id, function(status, regions) {
                                 if ( status === "SUCCESS" ) {
                                     var deployTo = {
+                                        "account": {
+                                            "awsAccountId": "",
+                                            "id": config.accountId
+                                        },
                                         "environment": {
                                             "name": name,
                                             "id": id,
