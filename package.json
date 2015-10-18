@@ -7,7 +7,7 @@
     "url": "https://github.com/alertlogic/ci_lambda_checks/issues"
   },
   "scripts": {
-    "build": "npm run test && node build/build.js && npm install --production --prefix target/ci_lambda_checks && node build/zip.js",
+    "build": "npm run test && node build/build.js && npm install --production --prefix target/ci_lambda_checks",
     "hookmeup": "cd utility; ./hookmeup.sh",
     "lint": "node node_modules/.bin/jshint --config ./.jshintrc --exclude-path ./.jshintignore ./",
     "test": "npm run lint",
