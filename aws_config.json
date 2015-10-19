@@ -1,1 +1,8 @@
-{"accessKeyId": "AKIAINPDSIWJFT6TKLZQ", "secretAccessKey": "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"}
+{
+    "environments": [
+        {
+            "id": "123123123123123",
+            "profile": "ozone"
+        }
+    ]
+}
