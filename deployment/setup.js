@@ -18,11 +18,12 @@ var defaultLambdaRoleName   = 'cloudinsight_custom_checks_lambda_role',
     defaultFunctionName     = 'ci_custom_checks',
     defaultHandlerName      = 'index.handler';
 
-var deploy = function(environments) {
+var deploy = function(environments, callback) {
     "use strict";
     async.each(environments, deployEnvironment,
     function(err) {
         console.log("Finished deploying custom checks.");
+        callback(err);
     });
 };
 

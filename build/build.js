@@ -166,11 +166,13 @@ prompt.get(ciLogin, function (err, result) {
              */
             function(token, rows, callback) {
                 var done = rows.length,
-                    count = 0;
+                    count = 0,
+                    sourcesAsync = require('async');
                 console.log("Processing applicable environments and scope for application in AWS Lambda regions.");
-                for (var row in rows) {
+                sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
+                    // for (var row in rows) {
                     count = count + 1;
-                    source = rows[row].source;
+                    var source = row.source;
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
                         if ( status === "SUCCESS" ) {
                             config.environmentId = source.id;
@@ -182,7 +184,7 @@ prompt.get(ciLogin, function (err, result) {
                                 execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
                                 process.chdir('../../');
                                 if(err) {
-                                    return callback("Unable to write deployment files.");
+                                    return sourcesAsyncCallback("Unable to write deployment files.");
                                 }
                             });
                             var deployment = {
@@ -206,38 +208,63 @@ prompt.get(ciLogin, function (err, result) {
                                         }
                                     }
                                     if (deployment.environment.regions.length > 0) {
-                                        deploymentList.push(deployment);
+                                        deploymentList.push(function(callback) {
+                                            promptForProfile(deployment, callback);
+                                        });
                                     }
-                                    if (count === done) {
-                                        callback(null);
-                                    }
+                                    sourcesAsyncCallback(null);
                                 } else {
-                                    callback("Unable to process environment regions.");
+                                    sourcesAsyncCallback("Unable to process environment regions.");
                                 }
                             });
                         } else {
-                            callback("Unable to process credentials.");
+                            sourcesAsyncCallback("Unable to process credentials.");
                         }
                     });
-                }
+                },
+                function(err) {
+                    if (err) {
+                        console.log("Failed to build deployment artifaacts. Error: " + JSON.stringify(err));
+                    } else {
+                        console.log("Successfully built deployment artifacts.");
+                    }
+                    callback(null, deploymentList);
+                });
+            },
+            function(deploymentList, callback) {
+                var promptAsync = require('async');
+                promptAsync.series(
+                    deploymentList,
+                    function(err, deployments) {
+                        if (err) {
+                            console.log("Error: " + JSON.stringify(err));
+                        } else {
+                            callback(null, deployments);
+                        }
+                    }
+                );
+            },
+            function(deploymentList, callback) {
+                console.log("Beginning deployment process to AWS Lambda.");
+                setup(deploymentList, callback);
             }
         ],
         function (err) {
-            var index = 0,
-                done  = deploymentList.length;
-            for (env in deploymentList) {
-                index = index + 1;
-                prompt.start();
-                console.log("Please provide the name of the AWS profile for environment: '" + deploymentList[env].environment.name + "'.")
-                prompt.get('profile', function (err, profile) {
-                    if (err) { return onErr(err); }
-                    deploymentList[env].account.profile = profile.profile;
-                    if (index === done) {
-                        console.log("Beginning deployment process to AWS Lambda.");
-                        setup(deploymentList);
-                    }
-                });
+            if (err) {
+                console.log("Build failed. Error: " + JSON.stringify(err));
             }
+            callback(err);
         }
     );
 });
+
+function promptForProfile(deployment, callback) {
+    "use strict";
+    prompt.start();
+    console.log("Please provide the name of the AWS profile for environment: '" + deployment.environment.name + "'.")
+    prompt.get('profile', function (err, profile) {
+        if (err) { return onErr(err); }
+        deployment.account.profile = profile.profile;
+        return callback(null, deployment);
+    });
+}
