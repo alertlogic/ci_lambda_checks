@@ -3,6 +3,7 @@
  * Setup AWS Config recording for the specified region and return SNS Topic ARN configured for AWS Config.
  * If the AWS Config already setup properly, but doesn't have recording on or doesn publish updates to the SNS Topic,
  * ensure that recording is on and the Topic is setup.
+ * In addition, setup lambda custom checks function to receive and process SNS notifications from AWS Config.
  */
 var async           = require('async'),
     awsConfigSetup  = require('./awsconfig_setup.js'),
@@ -17,11 +18,12 @@ var defaultLambdaRoleName   = 'cloudinsight_custom_checks_lambda_role',
     defaultFunctionName     = 'ci_custom_checks',
     defaultHandlerName      = 'index.handler';
 
-var deploy = function(environments) {
+var deploy = function(environments, callback) {
     "use strict";
     async.each(environments, deployEnvironment,
     function(err) {
         console.log("Finished deploying custom checks.");
+        callback(err);
     });
 };
 
@@ -57,7 +59,10 @@ function deployEnvironment(config, resultCallback) {
 function deployRegion(regionName, account, environment, logger, callback) {
     "use strict";
     var AWS             = require('aws-sdk');
-    AWS.config.loadFromPath('./aws_config.json');
+    if (environment.profile && environment.profile.length > 0) {
+        var credentials = new AWS.SharedIniFileCredentials({profile: environment.profile});
+        AWS.config.credentials = credentials;
+    }
 
     var setupData       = {
             aws:    AWS,
