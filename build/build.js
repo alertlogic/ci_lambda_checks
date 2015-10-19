@@ -19,7 +19,6 @@ var fs                = require('fs'),
     deploy            = pkg.folders.build + pkg.name + '/',
     deploymentList    = [],
     accountList       = [],
-    new_config        = '',
     execfile          = require('child_process').execFile;
 
 console.log('> Building: ' + deploy);
@@ -177,17 +176,11 @@ prompt.get(ciLogin, function (err, result) {
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
                         if ( status === "SUCCESS" ) {
                             config.environmentId = source.id;
-                            new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
                             var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + source.name + '-' + source.id + '-' + pkg.version + '.zip';
-                            fs.writeFile(deploy + 'config.js', new_config, function(err) {
-                                process.chdir('target');
-                                process.chdir('ci_lambda_checks');
-                                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
-                                process.chdir('../../');
-                                if(err) {
-                                    return sourcesAsyncCallback("Unable to write deployment files.");
-                                }
-                            });
+                            fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
+                            process.chdir('target/ci_lambda_checks');
+                            execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
+                            process.chdir('../../');
                             var deployment = {
                                 "account": {
                                     "awsAccountId": credential.credential.iam_role.arn.split(":")[4],
