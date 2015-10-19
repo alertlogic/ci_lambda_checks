@@ -17,6 +17,7 @@ var fs                = require('fs'),
     setup             = require('../deployment/setup.js'),
     base              = pkg.folders.jsSource,
     deploy            = pkg.folders.build + pkg.name + '/',
+    deploymentList    = [],
     new_config        = '',
     execfile          = require('child_process').execFile;
 
@@ -85,8 +86,10 @@ for ( var section in source ) {
  * Update the config.js file with proper information if anything is empty
  */
 function onErr(err) {
-    console.error("Error: " + err);
-    return 1;
+    if (err !== null) {
+        console.error("Error: " + err);
+        return 1;
+    }
 }
 
 var updated    = false,
@@ -117,9 +120,9 @@ if (properties.length > 0) {
 }
 
 var ciLogin = [
-    {"name": "identifier"},
-    {"name": "secret"}
-];
+        {"name": "identifier"},
+        {"name": "secret"}
+    ];
 
 console.log("Please sign in to Cloud Insight so that we can integrate with your environments.");
 prompt.start();
@@ -129,90 +132,112 @@ prompt.get(ciLogin, function (err, result) {
         config[key] = result[key];
     };
 
-    var token = getToken(function(status, token) {
-        if ( status === "SUCCESS" ) {
-            var environmentList = sources.getSources(token, function(status, environments) {
-                if ( status === "SUCCESS" ) {
-                    async.each(
-                        environments.sources,
-                        function(source, callback) {
-
-                            var name  = source.source.name,
-                                id    = source.source.id,
-                                creds = sources.getCredential(token, source.source.config.aws.credential.id, function(status, credential) {
-                                    if ( status === "SUCCESS" ) {
-
-                                        var awsAccountId = credential.credential.iam_role.arn.split(":")[4];
-
-                                        config.environmentId = id;
-
-                                        new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
-                                        var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + name + '-' + config.environmentId + '-' + pkg.version + '.zip';
-
-                                        fs.writeFile(deploy + 'config.js', new_config, function(err) {
-                                            process.chdir('target');
-                                            process.chdir('ci_lambda_checks');
-                                            execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
-                                            // This will help us deploy to all regions the customer has in scope per environment
-                                            deployList = [];
-                                            process.chdir('../../');
-                                            if(err) {
-                                                return onErr(err);
-                                            }
-                                        });
-
-                                        var regionList = getRegionsInScope(token, id, function(status, regions) {
-                                            if ( status === "SUCCESS" ) {
-                                                var deployTo = {
-                                                    "account": {
-                                                        "awsAccountId": awsAccountId,
-                                                        "id": config.accountId
-                                                    },
-                                                    "environment": {
-                                                        "name": name,
-                                                        "id": id,
-                                                        "file": 'ci_lambda_checks-' + config.accountId + '-' + name + '-' + id + '-' + pkg.version + '.zip',
-                                                        "regions": []
-                                                    }
-                                                };
-                                                async.each(
-                                                    regions.assets,
-                                                    function(region, callback) {
-                                                        for (var row in region) {
-                                                            var target = region[row].key.split('/')[2];
-                                                            if ( config.supported.indexOf(target) > -1 ) {
-                                                                deployTo.environment.regions.push(target);
-                                                            }
-                                                        }
-                                                        callback();
-                                                    },
-                                                    function(err){
-                                                        // Just ignore this, it's screwy assets empty rows.
-                                                    }
-                                                );
-                                                // Now we can deploy, YAY!
-                                                if (deployTo.environment.regions.length > 0) {
-                                                    setup([deployTo]);
-                                                }
-                                            } else {
-                                                return onErr(err);
-                                            }
-                                        });
-                                    } else {
-                                        return onErr(err);
+    async.waterfall(
+        [
+            /*
+             * Fetch token or fail
+             */
+            function(onErr) {
+                getToken(function(status, token) {
+                    console.log("Logging you in to the Cloud Insight API.");
+                    if ( status === "SUCCESS" ) {
+                        config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
+                        onErr(null, token);
+                    } else {
+                        onErr(status);
+                    }
+                });
+            },
+            /*
+             * Get list of available environments
+             */
+            function(token, callback) {
+                sources.getSources(token, function(status, environments) {
+                    console.log("Getting your environment list.");
+                    if ( status === "SUCCESS" ) {
+                        callback(null, token, environments.sources);
+                    } else {
+                        callback("Unable to fetch environments.");
+                    }
+                });
+            },
+            /*
+             * Process source records
+             */
+            function(token, rows, callback) {
+                var done = rows.length,
+                    count = 0;
+                console.log("Processing applicable environments and scope for application in AWS Lambda regions.");
+                for (var row in rows) {
+                    count = count + 1;
+                    source = rows[row].source;
+                    sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
+                        if ( status === "SUCCESS" ) {
+                            config.environmentId = source.id;
+                            new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
+                            var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + source.name + '-' + source.id + '-' + pkg.version + '.zip';
+                            fs.writeFile(deploy + 'config.js', new_config, function(err) {
+                                process.chdir('target');
+                                process.chdir('ci_lambda_checks');
+                                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
+                                process.chdir('../../');
+                                if(err) {
+                                    return callback("Unable to write deployment files.");
+                                }
+                            });
+                            var deployment = {
+                                "account": {
+                                    "awsAccountId": credential.credential.iam_role.arn.split(":")[4],
+                                    "id": config.accountId
+                                },
+                                "environment": {
+                                    "name": source.name,
+                                    "id": source.id,
+                                    "file": "ci_lambda_checks-" + config.accountId + "-" + source.name + "-" + source.id + "-" + pkg.version + ".zip",
+                                    "regions": []
+                                }
+                            };
+                            getRegionsInScope(token, source.id, function(status, regions) {
+                                if ( status === "SUCCESS" ) {
+                                    for (var region in regions.assets) {
+                                        var target = regions.assets[region][0].key.split('/')[2];
+                                        if ( config.supported.indexOf(target) > -1 ) {
+                                            deployment.environment.regions.push(target);
+                                        }
                                     }
-                                });
-                        },
-                        function(err){
-                            return onErr(err);
+                                    if (deployment.environment.regions.length > 0) {
+                                        deploymentList.push(deployment);
+                                    }
+                                    if (count === done) {
+                                        callback(null);
+                                    }
+                                } else {
+                                    callback("Unable to process environment regions.");
+                                }
+                            });
+                        } else {
+                            callback("Unable to process credentials.");
                         }
-                    );
-                } else {
-                    return onErr(err);
+                    });
                 }
-            });
-        } else {
-            return onErr(err);
+            }
+        ],
+        function (err) {
+            var index = 0,
+                done  = deploymentList.length;
+            for (env in deploymentList) {
+                index = index + 1;
+                prompt.start();
+                console.log("Please provide the name of the AWS profile for environment: '" + deploymentList[env].environment.name + "'.")
+                prompt.get('profile', function (err, profile) {
+                    if (err) { return onErr(err); }
+                    deploymentList[env].account.profile = profile.profile;
+                    if (index === done) {
+                        console.log("Beginning deployment process to AWS Lambda.");
+                        setup(deploymentList);
+                    }
+                });
+            }
         }
-    });
+    );
 });
