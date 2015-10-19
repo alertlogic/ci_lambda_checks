@@ -18,6 +18,7 @@ var fs                = require('fs'),
     base              = pkg.folders.jsSource,
     deploy            = pkg.folders.build + pkg.name + '/',
     deploymentList    = [],
+    accountList       = [],
     new_config        = '',
     execfile          = require('child_process').execFile;
 
@@ -260,10 +261,28 @@ prompt.get(ciLogin, function (err, result) {
 
 function promptForProfile(deployment, callback) {
     "use strict";
+    console.log("Please provide the name of the AWS profile for AWS Account: '" + deployment.account.awsAccountId + "' for Alert Logic environment: '" + deployment.environment.name + "'.");
+    var awsConfig = require("../aws_config.json");
+    for (var row in awsConfig.environments) {
+        if (deployment.environment.id === awsConfig.environments[row].id) {
+            deployment.account.profile = awsConfig.environments[row].profile;
+            return callback(null, deployment);
+        }
+    }
+    for (var account in accountList) {
+        console.log(accountList[account].account + " : " + deployment.account.awsAccountId);
+        if (accountList[account].account === deployment.account.awsAccountId) {
+            deployment.account.profile = accountList[account].profile;
+            return callback(null, deployment);
+        }
+    }
     prompt.start();
-    console.log("Please provide the name of the AWS profile for environment: '" + deployment.environment.name + "'.")
     prompt.get('profile', function (err, profile) {
         if (err) { return onErr(err); }
+        accountList.push({
+            "account": deployment.account.awsAccountId,
+            "profile": profile.profile
+        });
         deployment.account.profile = profile.profile;
         return callback(null, deployment);
     });

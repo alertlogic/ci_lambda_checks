@@ -1,1 +1,8 @@
-{"accessKeyId": "AKIAINPDSIWJFT6TKLZQ", "secretAccessKey": "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"}
+{
+    "environments": [
+        {
+            "id": "Alert-Logic-Environment-Id",
+            "profile": "AWS-Profile"
+        }
+    ]
+}
