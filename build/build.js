@@ -18,7 +18,7 @@ var fs                = require('fs'),
     base              = pkg.folders.jsSource,
     deploy            = pkg.folders.build + pkg.name + '/',
     deploymentList    = [],
-    new_config        = '',
+    accountList       = [],
     execfile          = require('child_process').execFile;
 
 console.log('> Building: ' + deploy);
@@ -176,17 +176,11 @@ prompt.get(ciLogin, function (err, result) {
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
                         if ( status === "SUCCESS" ) {
                             config.environmentId = source.id;
-                            new_config           = 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;';
                             var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + source.name + '-' + source.id + '-' + pkg.version + '.zip';
-                            fs.writeFile(deploy + 'config.js', new_config, function(err) {
-                                process.chdir('target');
-                                process.chdir('ci_lambda_checks');
-                                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
-                                process.chdir('../../');
-                                if(err) {
-                                    return sourcesAsyncCallback("Unable to write deployment files.");
-                                }
-                            });
+                            fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
+                            process.chdir('target/ci_lambda_checks');
+                            execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
+                            process.chdir('../../');
                             var deployment = {
                                 "account": {
                                     "awsAccountId": credential.credential.iam_role.arn.split(":")[4],
@@ -260,10 +254,28 @@ prompt.get(ciLogin, function (err, result) {
 
 function promptForProfile(deployment, callback) {
     "use strict";
+    console.log("Please provide the name of the AWS profile for AWS Account: '" + deployment.account.awsAccountId + "' for Alert Logic environment: '" + deployment.environment.name + "'.");
+    var awsConfig = require("../aws_config.json");
+    for (var row in awsConfig.environments) {
+        if (deployment.environment.id === awsConfig.environments[row].id) {
+            deployment.account.profile = awsConfig.environments[row].profile;
+            return callback(null, deployment);
+        }
+    }
+    for (var account in accountList) {
+        console.log(accountList[account].account + " : " + deployment.account.awsAccountId);
+        if (accountList[account].account === deployment.account.awsAccountId) {
+            deployment.account.profile = accountList[account].profile;
+            return callback(null, deployment);
+        }
+    }
     prompt.start();
-    console.log("Please provide the name of the AWS profile for environment: '" + deployment.environment.name + "'.")
     prompt.get('profile', function (err, profile) {
         if (err) { return onErr(err); }
+        accountList.push({
+            "account": deployment.account.awsAccountId,
+            "profile": profile.profile
+        });
         deployment.account.profile = profile.profile;
         return callback(null, deployment);
     });
