@@ -169,8 +169,7 @@ prompt.get(ciLogin, function (err, result) {
                     count = 0,
                     sourcesAsync = require('async');
                 console.log("Processing applicable environments and scope for application in AWS Lambda regions.");
-                sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
-                    // for (var row in rows) {
+                sourcesAsync.eachSeries(rows, function(row, sourcesAsyncCallback) {
                     count = count + 1;
                     var source = row.source;
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
