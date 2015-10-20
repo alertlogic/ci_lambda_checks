@@ -20,12 +20,43 @@ var defaultLambdaRoleName   = 'cloudinsight_custom_checks_lambda_role',
 
 var deploy = function(environments, callback) {
     "use strict";
-    async.each(environments, deployEnvironment,
-    function(err) {
-        console.log("Finished deploying custom checks.");
-        callback(err);
+    async.filter(environments, isValidEnvironment, function(results) {
+        async.each(environments, deployEnvironment,
+        function(err) {
+            console.log("Finished deploying custom checks.");
+            callback(err);
+        });
     });
 };
+
+function isValidEnvironment(config, callback) {
+    "use strict";
+    var account         = config.account,
+        environment     = config.environment,
+        AWS             = new require('aws-sdk');
+    if (account.profile && account.profile.length > 0) {
+        var credentials = new AWS.SharedIniFileCredentials({profile: account.profile});
+        AWS.config.credentials = credentials;
+    }
+
+    var iam = new AWS.IAM({apiVersion: '2010-05-08'});
+    iam.getUser({}, function(err, data) { 
+        if (err) {
+            console.log("Failed to lookup user specified by '" + account.profile + "' profile. " +
+                             "Skipping deployment of  Error: " + JSON.stringify(err));
+            callback(false);
+        } else {
+            var user = data.User;
+            if (user.Arn.split(":")[4] === account.awsAccountId) {
+                callback(true);
+            } else {
+                console.log("Skipping deploymeny for '" + environment.name + "' environment. Credentials specified in '" + account.profile + "' didn't match target account. " +
+                            "Account referenced in profile credentials" + user.Arn.split(":")[4] + ". Account referenced in the environment: " + account.awsAccountId);
+                callback(false);
+            }
+        }
+    });
+}
 
 function deployEnvironment(config, resultCallback) {
     "use strict";
@@ -58,9 +89,9 @@ function deployEnvironment(config, resultCallback) {
 
 function deployRegion(regionName, account, environment, logger, callback) {
     "use strict";
-    var AWS             = require('aws-sdk');
-    if (environment.profile && environment.profile.length > 0) {
-        var credentials = new AWS.SharedIniFileCredentials({profile: environment.profile});
+    var AWS             = new require('aws-sdk');
+    if (account.profile && account.profile.length > 0) {
+        var credentials = new AWS.SharedIniFileCredentials({profile: account.profile});
         AWS.config.credentials = credentials;
     }
 
@@ -71,7 +102,7 @@ function deployRegion(regionName, account, environment, logger, callback) {
             accountId: account.awsAccountId,
             supportedRegions: awsRegions,
             lambda: {
-                functionName:   defaultFunctionName,
+                functionName:   defaultFunctionName + "_" + account.id + "_" + environment.id,
                 roleName:       defaultLambdaRoleName,
                 handler:        defaultHandlerName,
                 runtime:        'nodejs',
