@@ -37,6 +37,38 @@ var setupLambda = function(setupData, resultCallback) {
     });
 };
 
+var enableSnsPublishing = function(setupData, resultCallback) {
+    "use strict";
+    var AWS     = setupData.aws;
+    AWS.config.update({region: setupData.setupRegion});
+
+    var params = {
+            Action:         "lambda:invokeFunction",
+            FunctionName:   setupData.lambda.functionName,
+            Principal:      "sns.amazonaws.com",
+            StatementId:    statementIdFromArn(setupData.deliveryChannels[0].snsTopicARN),
+            SourceArn:      setupData.deliveryChannels[0].snsTopicARN
+        },
+        logger  = setupData.logger,
+        lambda = new AWS.Lambda({apiVersion: '2015-03-31'});
+
+    lambda.addPermission(params, function(err, data) {
+        if (err) {
+            if (err.statusCode === 409) {
+                logger("Permission to receive SNS notifications by '" + setupData.lambda.functionName + "' lambda function already exists.");
+                return resultCallback(null, setupData);
+            } else {
+                logger("Failed to add permission to receive SNS notifications to '" + setupData.lambda.functionName + "' lambda function." +
+                        " Error: " + JSON.stringify(err));
+                return resultCallback(err);
+            }
+        } else {
+            logger("Successfully added permission to receive SNS notifications to '" + setupData.lambda.functionName + "' lambda function code.");
+            return resultCallback(null, setupData);
+        }
+    });
+};
+
 function uploadLambdaCode(lambda, setupData, resultCallback) {
     "use strict";
     var params = {
@@ -51,14 +83,21 @@ function uploadLambdaCode(lambda, setupData, resultCallback) {
                     " Error: " + JSON.stringify(err));
             return resultCallback(err);
         } else {
-            logger("Successfully uploaded '" + setupData.lambda.functionName + "' lambda function code. " +
-                   "Arn: " + data.FunctionArn);
             setupData.lambda.functionArn = data.FunctionArn;
+            logger("Successfully uploaded '" + setupData.lambda.functionName + "' lambda function code. " +
+                   "Arn: " + setupData.lambda.functionArn);
             return resultCallback(null, setupData);
         }
     });
 }
 
+function statementIdFromArn(snsTopicArn) {
+    "use strict";
+    var parsedTopicArn = snsTopicArn.match(/arn:aws:(.*):(.*):(.*):(.*)/);
+    return parsedTopicArn[1] + "-" + parsedTopicArn[2] + "-" + parsedTopicArn[3] + "-" + parsedTopicArn[4];
+}
+
 module.exports = {
-    createFunction: setupLambda
+    createFunction: setupLambda,
+    enableSnsPublishing: enableSnsPublishing
 };

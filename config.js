@@ -122,6 +122,21 @@ var config = {
                 evidence: "{sg_configuration,0}",
                 type : "application/json"
             }
+        },
+        "enableScanning": {
+            "name": "enableScanning",
+            "enabled": false,
+            "configuration": {
+                "resourceTypes": ["AWS::EC2::Instance"]
+            }
+        },
+        "enableVpcScanning": {
+            "name": "enableVpcScanning",
+            "enabled": true,
+            "mode": "snapshot",
+            "configuration": {
+                "resourceTypes": ["AWS::EC2::VPC"]
+            }
         }
     }
 };

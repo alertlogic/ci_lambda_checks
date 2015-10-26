@@ -1,5 +1,5 @@
 var config            = require('../config.js'),
-    namingConvention = function(rawMessage) {
+    namingConvention = function(inScope, rawMessage) {
     "use strict";
     
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||

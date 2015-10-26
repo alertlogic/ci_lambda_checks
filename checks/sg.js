@@ -1,6 +1,6 @@
 var BitArray       = require('../utilities/bit_array.js'),
     config         = require('../config.js'),
-    sg             = function(rawMessage)  {
+    sg             = function(inScope, rawMessage)  {
     "use strict";
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
         rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {

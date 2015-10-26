@@ -12,7 +12,7 @@ var fs                = require('fs'),
     config            = require('../config.js'),
     getToken          = require('../utilities/token.js'),
     sources           = require('../utilities/sources.js'),
-    getRegionsInScope = require('../utilities/regions.js'),
+    assets            = require('../utilities/assets.js'),
     pkg               = require('../package.json'),
     setup             = require('../deployment/setup.js'),
     base              = pkg.folders.jsSource,
@@ -193,7 +193,7 @@ prompt.get(ciLogin, function (err, result) {
                                     "regions": []
                                 }
                             };
-                            getRegionsInScope(token, source.id, function(status, regions) {
+                            assets.getRegionsInScope(token, source.id, function(status, regions) {
                                 if ( status === "SUCCESS" ) {
                                     for (var region in regions.assets) {
                                         var target = regions.assets[region][0].key.split('/')[2];

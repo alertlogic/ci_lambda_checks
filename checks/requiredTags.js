@@ -1,5 +1,5 @@
 var config            = require('../config.js'),
-    requiredTags      = function(rawMessage) {
+    requiredTags      = function(inScope, rawMessage) {
     "use strict";
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
         rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {

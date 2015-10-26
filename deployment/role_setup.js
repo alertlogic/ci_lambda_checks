@@ -300,7 +300,32 @@ function getLambdaPolicies() {
                     {
                         "Effect": "Allow",
                         "Action": [
-                            "s3:GetObject"
+                            "s3:GetObject",
+                            "s3:GetBucketLocation"
+                        ],
+                        "Resource": [
+                            "*"
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            name: "enable_cloud_insight_scanning",
+            policyDocument: {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid":  "DiscoverScanningProtection",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DescribeInstances",
+                            "ec2:DescribeInstanceAttribute",
+                            "ec2:ModifyInstanceAttribute",
+                            "ec2:DescribeSecurityGroups",
+                            "ec2:CreateSecurityGroup",
+                            "ec2:AuthorizeSecurityGroupIngress",
+                            "ec2:CreateTags"
                         ],
                         "Resource": [
                             "*"

@@ -5,7 +5,7 @@ var async           = require('async'),
     zlib            = require('zlib'),
     config          = require('./config.js'),
     pkg             = require('./package.json'),
-    getAssetKey     = require('./utilities/assets.js'),
+    assets          = require('./utilities/assets.js'),
     getToken        = require('./utilities/token.js'),
     publishResult   = require('./utilities/publish.js');
 
@@ -20,22 +20,36 @@ exports.handler = function(event, context) {
             if (rawMessage.hasOwnProperty('configurationItem') &&
                 rawMessage.configurationItem.hasOwnProperty('resourceType')) {
                 /*
-                * Process all configration items in stored in S3 object
+                * Process single configuration item
                 */
-                processConfigurationItem(
-                    token,
-                    function() {
-                        return context.succeed();
-                    },
-                    rawMessage);
-
+                analyze(token, rawMessage.configurationItem.awsRegion, function(status, vpcs) { 
+                    processConfigurationItem(
+                        token,
+                        vpcs,
+                        rawMessage,
+                        function(err) {
+                            return contextCallback(err, context);
+                    });
+                });
             } else if (rawMessage.hasOwnProperty('messageType') &&
                        rawMessage.messageType === 'ConfigurationSnapshotDeliveryCompleted') {
                 /*
                 * Process all configration items in stored in S3 object
                 */
-                console.log("Starting full snapshot processing");
-                processPeriodicSnapshot(token, context, rawMessage, getAwsRegionFromArn(event.Records[0].Sns.TopicArn));
+                var awsRegion = getAwsRegionFromArn(event.Records[0].Sns.TopicArn);
+                console.log("Starting full snapshot processing for '" + awsRegion + "'.");
+                analyze(token, awsRegion, function(status, vpcs) { 
+                    processPeriodicSnapshot(
+                        token,
+                        awsRegion,
+                        vpcs,
+                        rawMessage,
+                        function(err) {
+                            return contextCallback(err, context);
+                    });
+                }); 
+            } else {
+                return context.succeed();
             }
         } else {
             console.log("Unable to retreive token, check your credentials.");
@@ -44,18 +58,43 @@ exports.handler = function(event, context) {
     });
 };
 
-function processPeriodicSnapshot(token, context, rawMessage, awsRegion) {
+function analyze(token, awsRegion, callback) {
     "use strict";
-    var s3Endpoint  = getS3Endpoint('us-east-1'),
-        s3          = new aws.S3({endpoint: s3Endpoint, apiVersion: '2006-03-01'}),
-        params      = {
-            Bucket: rawMessage.s3Bucket,
-            Key: rawMessage.s3ObjectKey
+    assets.getVpcsInScope(token, config.environmentId, awsRegion, function(status, vpcs) {
+        if (status === 'SUCCESS') {
+            var result = [];
+            if (vpcs.hasOwnProperty('rows') && vpcs.rows > 0) {
+                result = vpcs.assets.map(function(vpc) {return vpc[0].vpc_id;});
+            }
+            callback(status, result);
+        } else {
+            callback(status);
+        }
+    });
+}
+
+function processPeriodicSnapshot(token, awsRegion, vpcs, rawMessage, resultCallback) {
+    "use strict";
+    async.waterfall([
+        function bucketLocation(callback) {
+            var s3 = new aws.S3({apiVersion: '2006-03-01'});
+            s3.getBucketLocation({Bucket: rawMessage.s3Bucket}, function(err, data) {
+                if (err) {
+                    console.error("Failed to get bucket location. Error: " + JSON.stringify(err));
+                    callback(err);
+                } else {
+                    var bucketLocation  = data.LocationConstraint;
+                    console.error("Snapshot bucket location: " + bucketLocation);
+                    callback(null, new aws.S3({endpoint: getS3Endpoint(bucketLocation), apiVersion: '2006-03-01'}));
+                }
+            });
         },
-        s3Async = require('async');
-    console.log("Getting config snapshot from '" + s3Endpoint + "'. " + JSON.stringify(params));
-    s3Async.waterfall([
-        function download(callback) {
+        function download(s3, callback) {
+            var params      = {
+                Bucket: rawMessage.s3Bucket,
+                Key: rawMessage.s3ObjectKey
+            };
+            console.log("Getting config snapshot. Parameters: " + JSON.stringify(params));
             s3.getObject({
                 Bucket: rawMessage.s3Bucket,
                 Key: rawMessage.s3ObjectKey
@@ -69,38 +108,65 @@ function processPeriodicSnapshot(token, context, rawMessage, awsRegion) {
                 callback(err, decoded && decoded.toString());
             });
         },
-        function done(data, next) {
+        function done(data, callback) {
             require('async').each(JSON.parse(data.toString('utf8'), null, 2).configurationItems,
-                function (item, callback) {
+                function (item, itemsCallback) {
                     var rawMessage = {
                         configurationItem: item
                     };
                     processConfigurationItem(
                         token,
+                        vpcs,
+                        rawMessage,
                         function() {
-                            return callback();
-                        },
-                        rawMessage);
+                            return itemsCallback();
+                        });
                 },
                 function(err) {
                     console.log("Finished processing configuration items");
-                    context.succeed();
+                    callback(err);
                 });
         }
-        ], function(err) {
+        ],
+        function(err) {
             if (err) {
-                console.log("Error: " + err);
+                console.error("Failed to process configuration snapshot. Error: " + JSON.stringify(err));
+                resultCallback(err);
             } else {
                 console.log("Finished processing snapshot");
+                resultCallback(null);
             }
-        });
+    });
 }
 
-function processConfigurationItem(token, completeCallback, rawMessage) {
+function processConfigurationItem(token, vpcs, rawMessage, completeCallback) {
     "use strict";
-    var awsRegion = rawMessage.configurationItem.awsRegion,
-        resourceType = rawMessage.configurationItem.resourceType,
-        resourceId = rawMessage.configurationItem.resourceId;
+    var awsRegion       = rawMessage.configurationItem.awsRegion,
+        resourceType    = rawMessage.configurationItem.resourceType,
+        resourceId      = rawMessage.configurationItem.resourceId,
+        relationships   = rawMessage.configurationItem.relationships,
+        vpcId           = null,
+        inScope         = true;
+
+    if (resourceType === "AWS::EC2::VPC") {
+        vpcId = resourceId;
+    } else {
+        for (var i = 0; i < relationships.length; i++) {
+            if (relationships[i].resourceType === "AWS::EC2::VPC" &&
+                relationships[i].name === "Is contained in Vpc") {
+                vpcId = relationships[i].resourceId;
+                break;
+            }
+        }
+    }
+        
+    // Tell checks if the vpc in scope.
+    if (vpcId && vpcs.indexOf(vpcId) === -1) {
+        inScope = false;
+    }
+    console.log("Resource inScope: '" + inScope + "'. ResourceType: '" + resourceType +
+                "', ResourceId: '" + resourceId +
+                "', VPC: '" + vpcId + "'. VPCs in scope: '" + vpcs.toString() + "'.");
 
     async.each(config.checks, function (check, callback) {
         if (check.enabled === true) {
@@ -116,8 +182,9 @@ function processConfigurationItem(token, completeCallback, rawMessage) {
             // Don't do anything if the check isn't applicable to the event's resourceType
             //
             if (-1 === check.configuration.resourceTypes.indexOf(resourceType)) {
-                console.log(
-                    "Skipping execution of the the check '" + check.name.toString() + "'\n" + "event's resourceType: '" + resourceType + "'\n" + "supported resourceTypes: '" + check.configuration.resourceTypes.toString() + "'");
+                console.log("Skipping execution of the check '" + check.name.toString() + "'\n" +
+                            "event's resourceType: '" + resourceType + "'\n" + "supported resourceTypes: '" +
+                            check.configuration.resourceTypes.toString() + "'");
                 callback();
                 return;
             }
@@ -125,7 +192,8 @@ function processConfigurationItem(token, completeCallback, rawMessage) {
             try {
                 var test = require('./checks/' + check.name.toString() + '.js'),
                     metadata = getMetadata(check.name.toString(), awsRegion, resourceType, resourceId);
-                if (test(rawMessage) === true) {
+                console.log("Executing custom check. CheckName: " + check.name.toString() + ", resourceType: " + resourceType + ", resourceId: " + resourceId);
+                if (test(inScope, rawMessage) === true) {
                     // Publish a result against the available metadata
                     publishResult(token, metadata, [check.vulnerability], callback);
                 } else {
@@ -133,7 +201,8 @@ function processConfigurationItem(token, completeCallback, rawMessage) {
                     publishResult(token, metadata, [], callback);
                 }
             } catch (e) {
-                console.log("Check '" + check.name.toString() + "' threw an exception.\nError: " + e.message + "\nStack: " + e.stack);
+                console.log("Check '" + check.name.toString() + "' threw an exception.\nError: " +
+                            e.message + "\nStack: " + e.stack);
                 callback();
             }
         } else {
@@ -147,13 +216,22 @@ function processConfigurationItem(token, completeCallback, rawMessage) {
     });
 }
 
+function contextCallback(err, context) {
+    "use strict";
+    if (err) {
+        return context.fail();
+    } else {
+        return context.succeed();
+    }
+}
+
 function getMetadata(checkName, awsRegion, resourceType, resourceId) {
     "use strict";
     return {
         scanner: "custom",
         scanner_scope: "custom" + checkName.toLowerCase(),
         timestamp: Math.round(+new Date()/1000),
-        asset_id: getAssetKey(awsRegion, resourceType, resourceId),
+        asset_id: assets.getAssetKey(awsRegion, resourceType, resourceId),
         environment_id: config.environmentId,
         scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v" + pkg.version,
         content_type: "application/json"
@@ -175,7 +253,7 @@ function getAwsRegionFromArn(arn) {
 
 function getS3Endpoint(region) {
     "use strict";
-    if (region === 'us-east-1') {
+    if (region === "" || region === 'us-east-1') {
             return 's3.amazonaws.com';
     }
     return 's3-' + region + '.amazonaws.com';

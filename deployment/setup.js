@@ -123,6 +123,7 @@ function deployRegion(regionName, account, environment, logger, callback) {
                             snsSetup.getTopic,
                             roleSetup.getConfigRole,
                             lambdaSetup.createFunction,
+                            lambdaSetup.enableSnsPublishing,
                             snsSetup.createLambdaSubscription,
                             awsConfigSetup.setupRecorder,
                             awsConfigSetup.createSnapshot
