@@ -13,7 +13,8 @@ exports.handler = function(event, context) {
     "use strict";
     console.log('Received event:', JSON.stringify(event, null, 2));
 
-    var rawMessage = JSON.parse(event.Records[0].Sns.Message);
+    var rawMessage = JSON.parse(event.Records[0].Sns.Message),
+        awsRegion = null;
     getToken(function(status, token) {
         if (status === "SUCCESS") {
             console.log("Successfully obtained token from the CloudInsight");
@@ -22,9 +23,16 @@ exports.handler = function(event, context) {
                 /*
                 * Process single configuration item
                 */
+                awsRegion = rawMessage.configurationItem.awsRegion !== null ?
+                            rawMessage.configurationItem.awsRegion :
+                            getAwsRegionFromArn(event.Records[0].Sns.TopicArn);
+
+                console.log("Processing event for '" + awsRegion + "'.");
                 analyze(token, rawMessage.configurationItem.awsRegion, function(status, vpcs) { 
                     processConfigurationItem(
+                        false,
                         token,
+                        awsRegion,
                         vpcs,
                         rawMessage,
                         function(err) {
@@ -36,7 +44,7 @@ exports.handler = function(event, context) {
                 /*
                 * Process all configration items in stored in S3 object
                 */
-                var awsRegion = getAwsRegionFromArn(event.Records[0].Sns.TopicArn);
+                awsRegion = getAwsRegionFromArn(event.Records[0].Sns.TopicArn);
                 console.log("Starting full snapshot processing for '" + awsRegion + "'.");
                 analyze(token, awsRegion, function(status, vpcs) { 
                     processPeriodicSnapshot(
@@ -115,7 +123,9 @@ function processPeriodicSnapshot(token, awsRegion, vpcs, rawMessage, resultCallb
                         configurationItem: item
                     };
                     processConfigurationItem(
+                        true,
                         token,
+                        awsRegion,
                         vpcs,
                         rawMessage,
                         function() {
@@ -139,23 +149,33 @@ function processPeriodicSnapshot(token, awsRegion, vpcs, rawMessage, resultCallb
     });
 }
 
-function processConfigurationItem(token, vpcs, rawMessage, completeCallback) {
+function processConfigurationItem(snapshotEvent, token, awsRegion, vpcs, rawMessage, completeCallback) {
     "use strict";
-    var awsRegion       = rawMessage.configurationItem.awsRegion,
-        resourceType    = rawMessage.configurationItem.resourceType,
+    var resourceType    = rawMessage.configurationItem.resourceType,
         resourceId      = rawMessage.configurationItem.resourceId,
-        relationships   = rawMessage.configurationItem.relationships,
         vpcId           = null,
         inScope         = true;
 
     if (resourceType === "AWS::EC2::VPC") {
         vpcId = resourceId;
     } else {
-        for (var i = 0; i < relationships.length; i++) {
-            if (relationships[i].resourceType === "AWS::EC2::VPC" &&
-                relationships[i].name === "Is contained in Vpc") {
-                vpcId = relationships[i].resourceId;
-                break;
+        if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
+            // Deleted resources have a different config item layout
+            vpcId = rawMessage.configurationItemDiff.changedProperties.Configuration.previousValue.vpcId;
+        } else {
+            if (rawMessage.configurationItem.hasOwnProperty("configuration") &&
+                rawMessage.configurationItem.configuration.hasOwnProperty("configurationItem") &&
+                rawMessage.configurationItem.configurationItem.hasOwnProperty("vpcId")) {
+                vpcId = rawMessage.configurationItem.configurationItem.vpcId;
+            } else {
+                var relationships   = rawMessage.configurationItem.relationships;
+                for (var i = 0; i < relationships.length; i++) {
+                    if (relationships[i].resourceType === "AWS::EC2::VPC" &&
+                        relationships[i].name === "Is contained in Vpc") {
+                        vpcId = relationships[i].resourceId;
+                        break;
+                    }
+                }
             }
         }
     }
@@ -173,8 +193,7 @@ function processConfigurationItem(token, vpcs, rawMessage, completeCallback) {
 
             if (!isCheckNameValid(check.name.toString())) {
                 console.log("Invalid check name. Use only alphanumeric values. Check name: " + check.name.toString());
-                callback();
-                return;
+                return callback();
             }
             console.log("Check '" + check.name.toString() + "' is enabled.");
 
@@ -185,21 +204,29 @@ function processConfigurationItem(token, vpcs, rawMessage, completeCallback) {
                 console.log("Skipping execution of the check '" + check.name.toString() + "'\n" +
                             "event's resourceType: '" + resourceType + "'\n" + "supported resourceTypes: '" +
                             check.configuration.resourceTypes.toString() + "'");
-                callback();
-                return;
+                return callback();
             }
 
             try {
                 var test = require('./checks/' + check.name.toString() + '.js'),
                     metadata = getMetadata(check.name.toString(), awsRegion, resourceType, resourceId);
                 console.log("Executing custom check. CheckName: " + check.name.toString() + ", resourceType: " + resourceType + ", resourceId: " + resourceId);
-                if (test(inScope, rawMessage) === true) {
-                    // Publish a result against the available metadata
-                    publishResult(token, metadata, [check.vulnerability], callback);
-                } else {
-                    // Clear a result against the available metadata
-                    publishResult(token, metadata, [], callback);
-                }
+
+                test(snapshotEvent, inScope, awsRegion, vpcId, rawMessage, function(err, result) {
+                    if (err) {
+                        console.log("Check '" + check.name.toString() + "' failed. Error: " +
+                            JSON.stringify(err));
+                        return callback();
+                    } else {
+                        if (result === true) {
+                            // Publish a result against the available metadata
+                            publishResult(token, metadata, [check.vulnerability], callback);
+                        } else {
+                            // Clear a result against the available metadata
+                            publishResult(token, metadata, [], callback);
+                        }
+                    }
+                });
             } catch (e) {
                 console.log("Check '" + check.name.toString() + "' threw an exception.\nError: " +
                             e.message + "\nStack: " + e.stack);
@@ -247,7 +274,6 @@ function getAwsRegionFromArn(arn) {
     "use strict";
     var regionIndex = 3,
         awsRegion   = arn.split(":")[regionIndex];
-    console.log("Region: " + awsRegion);
     return awsRegion;
 }
 

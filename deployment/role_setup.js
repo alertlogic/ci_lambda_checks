@@ -325,7 +325,8 @@ function getLambdaPolicies() {
                             "ec2:DescribeSecurityGroups",
                             "ec2:CreateSecurityGroup",
                             "ec2:AuthorizeSecurityGroupIngress",
-                            "ec2:CreateTags"
+                            "ec2:CreateTags",
+                            "ec2:DeleteTags"
                         ],
                         "Resource": [
                             "*"

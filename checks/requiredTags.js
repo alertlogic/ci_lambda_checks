@@ -1,5 +1,5 @@
 var config            = require('../config.js'),
-    requiredTags      = function(inScope, rawMessage) {
+    requiredTags      = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback) {
     "use strict";
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
         rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
@@ -7,12 +7,12 @@ var config            = require('../config.js'),
         * Only evaluate policies applicable to the resource type specified in the event.
         */
         var policies = config.checks.requiredTags.configuration.policies.filter(function(policy) {
-            return (policy.resourceTypes.indexOf(rawMessage.configurationItem.resourceType) >= 0);
+            return policy.resourceTypes.indexOf(rawMessage.configurationItem.resourceType) >= 0;
         });
 
         if (!policies.length) {
             console.log("requiredTags: Clearing tagging policy vulnerability");
-            return false;
+            return callback(null, false);
         }
 
         for (var i = 0; i <  policies.length; i++) {
@@ -21,12 +21,12 @@ var config            = require('../config.js'),
                     rawMessage.configurationItem.tags,
                     policies[i])) {
                 console.log("requiredTags: Creating tagging policy violation");
-                return true;
+                return callback(null, true);
             }
         }
     }
     console.log("requiredTags: Clearing tagging policy vulnerability");
-    return false;
+    return callback(null, false);
 };
 
 function validateTags(resourceType, tags, policy) {

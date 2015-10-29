@@ -123,19 +123,12 @@ var config = {
                 type : "application/json"
             }
         },
-        "enableScanning": {
-            "name": "enableScanning",
-            "enabled": false,
-            "configuration": {
-                "resourceTypes": ["AWS::EC2::Instance"]
-            }
-        },
         "enableVpcScanning": {
             "name": "enableVpcScanning",
             "enabled": true,
             "mode": "snapshot",
             "configuration": {
-                "resourceTypes": ["AWS::EC2::VPC"]
+                "resourceTypes": ["AWS::EC2::VPC", "AWS::EC2::Instance"]
             }
         }
     }
