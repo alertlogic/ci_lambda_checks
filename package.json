@@ -7,7 +7,7 @@
     "url": "https://github.com/alertlogic/ci_lambda_checks/issues"
   },
   "scripts": {
-    "build": "npm run test && node build/build.js && npm install --production --prefix target/ci_lambda_checks",
+    "build": "npm run test && node build/build.js",
     "hookmeup": "cd utility; ./hookmeup.sh",
     "lint": "node node_modules/.bin/jshint --config ./.jshintrc --exclude-path ./.jshintignore ./",
     "test": "npm run lint",
@@ -18,7 +18,7 @@
     "type": "git",
     "url": "git@github.com:alertlogic/ci_lambda_checks.git"
   },
-  "version": "0.0.3",
+  "version": "0.0.4",
   "license": "MIT",
   "engines": {
     "node": "0.12.7"

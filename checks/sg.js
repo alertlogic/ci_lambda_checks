@@ -1,6 +1,6 @@
 var BitArray       = require('../utilities/bit_array.js'),
     config         = require('../config.js'),
-    sg             = function(rawMessage)  {
+    sg             = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback)  {
     "use strict";
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
         rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
@@ -11,11 +11,11 @@ var BitArray       = require('../utilities/bit_array.js'),
         var diff = BitArray.getDifference(sgAclEntries, getAllowedPorts()).toNumber();
         if (diff) {
             console.log("Creating security group vulnerability");
-            return true;
+            return callback(null, true);
         }
     }
     console.log("Clearing security group vulnerability");
-    return false;
+    return callback(null, false);
 };
 
 function getAllowedPorts() {

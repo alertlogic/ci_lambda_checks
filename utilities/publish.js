@@ -38,13 +38,13 @@ var publishResult = function(token, metadata, result, callback) {
                 } else {
                     console.log("Failed to create Vulnerability Instance. StatusCode: " + res.statusCode);
                 }
-                callback();
+                return callback();
             });
         });
 
         postExposure.on('error', function(e) {
             console.log('problem with request: ' + e.message);
-            callback();
+            return callback();
         });
 
         postExposure.write(payload.toString());

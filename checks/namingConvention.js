@@ -1,5 +1,5 @@
 var config            = require('../config.js'),
-    namingConvention = function(rawMessage) {
+    namingConvention = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback) {
     "use strict";
     
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
@@ -9,16 +9,16 @@ var config            = require('../config.js'),
 
         if (resourceName == null) {
             console.log("namingConvention: Resource name is empty.");
-            return false;
+            return callback(null, false);
         }
 
         if (!matchesConventions(rawMessage.configurationItem.resourceType, resourceName, conventions)) {
             console.log("namingConvention: Creating naming convention vulnerability");
-            return true;
+            return callback(null, true);
         }
     }
     console.log("namingConvention: Clearing naming convention vulnerability");
-    return false;
+    return callback(null, false);
 };
 
 function matchesConventions(resourceType, resourceName, conventions) {

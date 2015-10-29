@@ -12,7 +12,7 @@ var fs                = require('fs'),
     config            = require('../config.js'),
     getToken          = require('../utilities/token.js'),
     sources           = require('../utilities/sources.js'),
-    getRegionsInScope = require('../utilities/regions.js'),
+    assets            = require('../utilities/assets.js'),
     pkg               = require('../package.json'),
     setup             = require('../deployment/setup.js'),
     base              = pkg.folders.jsSource,
@@ -45,6 +45,7 @@ var source = {
  * Create the node_modules directory so that it exists for installation regardless of module definitions for deployment
  */
 mkdirp(deploy + 'node_modules/', function (err) {
+    execfile('npm', ['install', '--production', '--prefix', 'target/ci_lambda_checks'], function(err, stdout) {});
     if (err) {
         return onErr(err);
     }
@@ -169,8 +170,7 @@ prompt.get(ciLogin, function (err, result) {
                     count = 0,
                     sourcesAsync = require('async');
                 console.log("Processing applicable environments and scope for application in AWS Lambda regions.");
-                sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
-                    // for (var row in rows) {
+                sourcesAsync.eachSeries(rows, function(row, sourcesAsyncCallback) {
                     count = count + 1;
                     var source = row.source;
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
@@ -193,7 +193,7 @@ prompt.get(ciLogin, function (err, result) {
                                     "regions": []
                                 }
                             };
-                            getRegionsInScope(token, source.id, function(status, regions) {
+                            assets.getRegionsInScope(token, source.id, function(status, regions) {
                                 if ( status === "SUCCESS" ) {
                                     for (var region in regions.assets) {
                                         var target = regions.assets[region][0].key.split('/')[2];
