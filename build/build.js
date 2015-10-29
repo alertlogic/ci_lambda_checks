@@ -9,6 +9,7 @@ var fs                = require('fs'),
     prompt            = require('prompt'),
     async             = require('async'),
     AWS               = require('aws-sdk'),
+    winston           = require('winston'),
     config            = require('../config.js'),
     getToken          = require('../utilities/token.js'),
     sources           = require('../utilities/sources.js'),
@@ -21,7 +22,7 @@ var fs                = require('fs'),
     accountList       = [],
     execfile          = require('child_process').execFile;
 
-console.log('> Building: ' + deploy);
+winston.info('Building Lambda checks to ' + deploy);
 
 /*
  * Source location mappings for glob
@@ -88,7 +89,7 @@ for ( var section in source ) {
  */
 function onErr(err) {
     if (err !== null) {
-        console.error("Error: " + err);
+        winston.error(err);
         return 1;
     }
 }
@@ -110,7 +111,7 @@ for ( var requirement in required ) {
 
 // Prompt the user for data or fail
 if (properties.length > 0) {
-    console.log("Some required properties have not been set, please provide them below and we will update your config.js file for you.");
+    winston.warn("Some required properties have not been set, please provide them below and we will update your config.js file for you.");
     prompt.start();
     prompt.get(properties, function (err, result) {
         if (err) { return onErr(err); }
@@ -125,7 +126,7 @@ var ciLogin = [
         {"name": "secret"}
     ];
 
-console.log("Please sign in to Cloud Insight so that we can integrate with your environments.");
+winston.info("Please sign in to Cloud Insight so that we can integrate with your environments.");
 prompt.start();
 prompt.get(ciLogin, function (err, result) {
     if (err) { return onErr(err); }
@@ -140,7 +141,7 @@ prompt.get(ciLogin, function (err, result) {
              */
             function(onErr) {
                 getToken(function(status, token) {
-                    console.log("Logging you in to the Cloud Insight API.");
+                    winston.info("Logging you in to the Cloud Insight API.");
                     if ( status === "SUCCESS" ) {
                         config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
                         onErr(null, token);
@@ -154,7 +155,7 @@ prompt.get(ciLogin, function (err, result) {
              */
             function(token, callback) {
                 sources.getSources(token, function(status, environments) {
-                    console.log("Getting your environment list.");
+                    winston.info("Getting your environment list.");
                     if ( status === "SUCCESS" ) {
                         callback(null, token, environments.sources);
                     } else {
@@ -169,7 +170,7 @@ prompt.get(ciLogin, function (err, result) {
                 var done = rows.length,
                     count = 0,
                     sourcesAsync = require('async');
-                console.log("Processing applicable environments and scope for application in AWS Lambda regions.");
+                winston.info("Processing applicable environments and scope for application in AWS Lambda regions.");
                 sourcesAsync.eachSeries(rows, function(row, sourcesAsyncCallback) {
                     count = count + 1;
                     var source = row.source;
@@ -218,9 +219,9 @@ prompt.get(ciLogin, function (err, result) {
                 },
                 function(err) {
                     if (err) {
-                        console.log("Failed to build deployment artifaacts. Error: " + JSON.stringify(err));
+                        winston.error("Failed to build deployment artifaacts. Error: " + JSON.stringify(err));
                     } else {
-                        console.log("Successfully built deployment artifacts.");
+                        winston.info("Successfully built deployment artifacts.");
                     }
                     callback(null, deploymentList);
                 });
@@ -231,7 +232,7 @@ prompt.get(ciLogin, function (err, result) {
                     deploymentList,
                     function(err, deployments) {
                         if (err) {
-                            console.log("Error: " + JSON.stringify(err));
+                            winston.error("Error: " + JSON.stringify(err));
                         } else {
                             callback(null, deployments);
                         }
@@ -239,13 +240,13 @@ prompt.get(ciLogin, function (err, result) {
                 );
             },
             function(deploymentList, callback) {
-                console.log("Beginning deployment process to AWS Lambda.");
+                winston.info("Beginning deployment process to AWS Lambda.");
                 setup(deploymentList, callback);
             }
         ],
         function (err) {
             if (err) {
-                console.log("Build failed. Error: " + JSON.stringify(err));
+                winston.error("Build failed. Error: " + JSON.stringify(err));
             }
             callback(err);
         }
@@ -254,7 +255,7 @@ prompt.get(ciLogin, function (err, result) {
 
 function promptForProfile(deployment, callback) {
     "use strict";
-    console.log("Please provide the name of the AWS profile for AWS Account: '" + deployment.account.awsAccountId + "' for Alert Logic environment: '" + deployment.environment.name + "'.");
+    winston.info("Please provide the name of the AWS profile for AWS Account: '" + deployment.account.awsAccountId + "' for Alert Logic environment: '" + deployment.environment.name + "'.");
     var awsConfig = require("../aws_config.json");
     for (var row in awsConfig.environments) {
         if (deployment.environment.id === awsConfig.environments[row].id) {
