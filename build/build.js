@@ -263,7 +263,6 @@ function promptForProfile(deployment, callback) {
         }
     }
     for (var account in accountList) {
-        console.log(accountList[account].account + " : " + deployment.account.awsAccountId);
         if (accountList[account].account === deployment.account.awsAccountId) {
             deployment.account.profile = accountList[account].profile;
             return callback(null, deployment);
