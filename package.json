@@ -25,7 +25,8 @@
   },
   "dependencies": {
     "async": "^1.4.2",
-    "winston": "^1.1.2"
+    "winston": "^1.1.2",
+    "winston-cloudwatch": "^0.6.1"
   },
   "folders": {
     "build": "target/",

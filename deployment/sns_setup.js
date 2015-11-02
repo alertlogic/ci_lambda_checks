@@ -1,4 +1,5 @@
-var defaultTopicName    = 'config-topic';
+var async               = require('async'),
+    defaultTopicName    = 'config-topic';
 
 var getSNSTopic = function(setupData, resultCallback) {
     "use strict";
@@ -57,17 +58,33 @@ function createTopic(setupData, callback) {
     });
 }
 
-function subscribe(setupData, callback) {
+function subscribe(setupData, resultCallback) {
     "use strict";
     var AWS     = setupData.aws,
         logger  = setupData.logger;
     AWS.config.update({region: setupData.setupRegion});
     
-    var sns         = new AWS.SNS({apiVersion: '2010-03-31'}),
-        params = {
+    var sns         = new AWS.SNS({apiVersion: '2010-03-31'});
+
+    async.each(setupData.lambda,
+        function(lambdaSetup, callback) {
+            if (!lambdaSetup.hasOwnProperty("subscribe") || !lambdaSetup.subscribe) {
+                return callback();
+            }
+            subscribeLambdaFunction(lambdaSetup, setupData.deliveryChannels[0].snsTopicARN, sns, logger, callback);
+        },
+        function(err) {
+            return resultCallback(err, setupData);
+        }
+    );
+}
+
+function subscribeLambdaFunction(lambdaSetup, snsTopicArn, sns, logger, callback) {
+    "use strict";
+    var params = {
             Protocol: "lambda", 
-            TopicArn: setupData.deliveryChannels[0].snsTopicARN,
-            Endpoint: setupData.lambda.functionArn
+            TopicArn: snsTopicArn,
+            Endpoint: lambdaSetup.functionArn
         };
 
     sns.subscribe(params, function(err, data) {
@@ -78,7 +95,7 @@ function subscribe(setupData, callback) {
         } else {
             logger("Successfully subscribed lambda function '" + params.Endpoint +
                     "' to topic '" + params.TopicArn + "'.");
-            return callback(null, setupData);
+            return callback(null);
         }
     });
 }
