@@ -37,11 +37,21 @@ var setupConfigRole = function(setupData, resultCallback) {
 
 var setupLambdaRole = function(setupData, resultCallback) {
     "use strict";
-    var roleName = setupData.lambda.roleName;
-    setupRole(setupData, roleName, "lambda.amazonaws.com", getLambdaPolicies(), function(err, result) {
-        setupData.lambda.roleArn = result;
-        resultCallback(null, setupData); 
-    });
+    async.map(setupData.lambda,
+        function(lambdaSetup, callback) { 
+            var roleName = lambdaSetup.roleName;
+            setupRole(setupData, roleName, "lambda.amazonaws.com", getLambdaPolicies(lambdaSetup),
+                function(err, result) {
+                    lambdaSetup.roleArn = result;
+                    callback(null, lambdaSetup);
+            });
+        },
+        function(err, result) {
+            if (err) {return resultCallback(err, setupData);}
+            setupData.lambda = result;
+            return resultCallback(null, setupData);
+        }
+    );
 };
 
 function setupRole(setupData, roleName, serviceName, policies, resultCallback) {
@@ -103,11 +113,17 @@ function getRole(setupData, roleName, assumeRoleService, callback) {
                         RoleName: roleName
                     };
                     return iam.createRole(params, function(err, data) {
-                        if (err) {
+                        if (err && err.statusCode === 409) {
+                            var arn = "arn:aws:iam::" + setupData.accountId +
+                                      ":role/" + roleName;
+                            logger("'" + roleName + "' role already exists.");
+                            return callback(null, arn);
+                        } else if (err) {
                             logger("Failed to create '" + roleName + "' role. Error: " + JSON.stringify(err));
                             return callback(err, null);
                         } else {
                             logger("Successfully created '" + roleName + "' role.");
+                            // return waitForRoleAvailability(iam, logger, roleName, callback);
                             return callback(null, data.Role.Arn);
                         }
                     });
@@ -272,9 +288,9 @@ function getConfigPoilicies(setupData) {
     ];
 }
 
-function getLambdaPolicies() {
+function getLambdaPolicies(lambdaSetup) {
     "use strict";
-    return [
+    var result = [
         {
             name: "basic_lambda_execution_policy",
             policyDocument: {
@@ -283,12 +299,13 @@ function getLambdaPolicies() {
                     {
                         "Effect": "Allow",
                         "Action": [
+                            "logs:DescribeLogStreams",
                             "logs:CreateLogGroup",
                             "logs:CreateLogStream",
                             "logs:PutLogEvents"
                         ],
                         "Resource": "arn:aws:logs:*:*:*"
-                    }
+                    },
                 ]
             }
         },
@@ -336,6 +353,30 @@ function getLambdaPolicies() {
             }
         }
     ];
+
+    if (!lambdaSetup.hasOwnProperty("subscribe") || !lambdaSetup.subscribe) {
+        var workerPolicy = {
+            name: "lambda_worker_execution_policy",
+            policyDocument: {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "CallWorker",
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:InvokeFunction"
+                        ],
+                        "Resource": [
+                            "arn:aws:lambda:*:*:function:ci_checks_worker*"
+                        ]
+                    }
+                ]
+            }
+        };
+        result.push(workerPolicy);
+    }
+
+    return result;
 }
 
 function getRegionSnsStatement(accountId, region) {

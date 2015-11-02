@@ -123,7 +123,7 @@ if (properties.length > 0) {
 
 var ciLogin = [
         {"name": "identifier"},
-        {"name": "secret"}
+        {"name": "secret", "required": true, "hidden": true}
     ];
 
 winston.info("Please sign in to Cloud Insight so that we can integrate with your environments.");
@@ -167,81 +167,59 @@ prompt.get(ciLogin, function (err, result) {
              * Process source records
              */
             function(token, rows, callback) {
-                var done = rows.length,
-                    count = 0,
-                    sourcesAsync = require('async');
-                winston.info("Processing applicable environments and scope for application in AWS Lambda regions.");
-                sourcesAsync.eachSeries(rows, function(row, sourcesAsyncCallback) {
-                    count = count + 1;
+                var count = 0,
+                    awsAccounts = {};
+                async.eachSeries(rows, function(row, sourcesAsyncCallback) {
                     var source = row.source;
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
-                        if ( status === "SUCCESS" ) {
-                            config.environmentId = source.id;
-                            var zipped           = '../ci_lambda_checks-' + config.accountId + '-' + source.name + '-' + source.id + '-' + pkg.version + '.zip';
-                            fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
-                            process.chdir('target/ci_lambda_checks');
-                            execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
-                            process.chdir('../../');
-                            var deployment = {
-                                "account": {
-                                    "awsAccountId": credential.credential.iam_role.arn.split(":")[4],
-                                    "id": config.accountId
-                                },
-                                "environment": {
-                                    "name": source.name,
-                                    "id": source.id,
-                                    "file": "ci_lambda_checks-" + config.accountId + "-" + source.name + "-" + source.id + "-" + pkg.version + ".zip",
-                                    "regions": []
-                                }
-                            };
-                            assets.getRegionsInScope(token, source.id, function(status, regions) {
-                                if ( status === "SUCCESS" ) {
-                                    for (var region in regions.assets) {
-                                        var target = regions.assets[region][0].key.split('/')[2];
-                                        if ( config.supported.indexOf(target) > -1 ) {
-                                            deployment.environment.regions.push(target);
-                                        }
-                                    }
-                                    if (deployment.environment.regions.length > 0) {
-                                        deploymentList.push(function(callback) {
-                                            promptForProfile(deployment, callback);
-                                        });
-                                    }
-                                    sourcesAsyncCallback(null);
-                                } else {
-                                    sourcesAsyncCallback("Unable to process environment regions.");
-                                }
-                            });
+                        var environmentId   = source.id,
+                            awsAccountId    = credential.credential.iam_role.arn.split(":")[4],
+                            awsRegions         = [];
+                        // Get regions in scope for the environment
+                        if (!awsAccounts.hasOwnProperty(awsAccountId)) {
+                            awsAccounts[awsAccountId] = {"regions": []};
                         } else {
-                            sourcesAsyncCallback("Unable to process credentials.");
+                            awsRegions = awsAccounts[awsAccountId].regions;
                         }
+                        assets.getRegionsInScope(token, source.id, function(status, regions) {
+                            if (status !== "SUCCESS") {return sourcesAsyncCallback(status);}
+                            for (var region in regions.assets) {
+                                var target = regions.assets[region][0].name;
+                                if (awsRegions.indexOf(target) < 0) {
+                                    awsRegions.push(target);
+                                }
+                            }
+                            awsAccounts[awsAccountId].regions = awsRegions;
+                            return sourcesAsyncCallback();
+                        });
                     });
                 },
                 function(err) {
                     if (err) {
-                        winston.error("Failed to build deployment artifaacts. Error: " + JSON.stringify(err));
+                        winston.error("Failed to discover protected regions. Error: " + JSON.stringify(err));
+                        return callback(err);
                     } else {
-                        winston.info("Successfully built deployment artifacts.");
+                        winston.info("Successfully discovered protected regions.");
+                        return callback(null, awsAccounts);
                     }
-                    callback(null, deploymentList);
                 });
             },
-            function(deploymentList, callback) {
-                var promptAsync = require('async');
-                promptAsync.series(
-                    deploymentList,
-                    function(err, deployments) {
-                        if (err) {
-                            winston.error("Error: " + JSON.stringify(err));
-                        } else {
-                            callback(null, deployments);
-                        }
-                    }
-                );
+            function(awsAccounts, callback) {
+                promptForProfileNew(awsAccounts, callback);
             },
-            function(deploymentList, callback) {
-                winston.info("Beginning deployment process to AWS Lambda.");
-                setup(deploymentList, callback);
+            function(awsAccounts, callback) {
+                var fileName = 'ci_lambda_checks-' + config.accountId + '-' + pkg.version + '.zip';
+                var zipped  = '../' + fileName;
+                fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
+                process.chdir('target/ci_lambda_checks');
+                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
+                process.chdir('../../');
+                var deploymentSpec = {
+                    "accountId": config.accountId,
+                    "file": fileName,
+                    "awsAccounts": awsAccounts
+                };
+                setup(deploymentSpec, callback);
             }
         ],
         function (err) {
@@ -253,30 +231,24 @@ prompt.get(ciLogin, function (err, result) {
     );
 });
 
-function promptForProfile(deployment, callback) {
+function promptForProfileNew(awsAccounts, callback) {
     "use strict";
-    winston.info("Please provide the name of the AWS profile for AWS Account: '" + deployment.account.awsAccountId + "' for Alert Logic environment: '" + deployment.environment.name + "'.");
-    var awsConfig = require("../aws_config.json");
-    for (var row in awsConfig.environments) {
-        if (deployment.environment.id === awsConfig.environments[row].id) {
-            deployment.account.profile = awsConfig.environments[row].profile;
-            return callback(null, deployment);
-        }
-    }
-    for (var account in accountList) {
-        if (accountList[account].account === deployment.account.awsAccountId) {
-            deployment.account.profile = accountList[account].profile;
-            return callback(null, deployment);
-        }
-    }
+    var schema = {
+        "properties": {}
+    };
+    Object.getOwnPropertyNames(awsAccounts).forEach(function(awsAccountId, idx, array) {
+        schema.properties[awsAccountId] = {
+            "required": true,
+            "message": "Please provide the name of the AWS profile for AWS Account: '" + awsAccountId + "'"
+        };
+    });
+
     prompt.start();
-    prompt.get('profile', function (err, profile) {
+    prompt.get(schema, function (err, result) {
         if (err) { return onErr(err); }
-        accountList.push({
-            "account": deployment.account.awsAccountId,
-            "profile": profile.profile
+        Object.getOwnPropertyNames(awsAccounts).forEach(function(awsAccountId, idx, array) {
+            awsAccounts[awsAccountId]["profile"] = result[awsAccountId];
         });
-        deployment.account.profile = profile.profile;
-        return callback(null, deployment);
+        return callback(null, awsAccounts);
     });
 }
