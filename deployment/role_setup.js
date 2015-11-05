@@ -341,7 +341,9 @@ function getLambdaPolicies(lambdaSetup) {
                             "ec2:ModifyInstanceAttribute",
                             "ec2:DescribeSecurityGroups",
                             "ec2:CreateSecurityGroup",
+                            "ec2:DeleteSecurityGroup",
                             "ec2:AuthorizeSecurityGroupIngress",
+                            "ec2:RevokeSecurityGroupIngress",
                             "ec2:CreateTags",
                             "ec2:DeleteTags"
                         ],

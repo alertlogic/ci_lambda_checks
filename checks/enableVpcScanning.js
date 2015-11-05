@@ -209,7 +209,7 @@ function unprotectVpc(vpcId, instances, ec2, resultCallback) {
                 reportDebug("'" + alProtectionGroupName + "' has references to other environments. Not disabling scanning.");
                 return resultCallback(null, false);
             }
-            removeVpcProtection(instances, data.GroupId, vpcId, ec2, function (err, data) {
+            removeVpcProtection(instances, data, vpcId, ec2, function (err, data) {
                 return resultCallback(null, false);
             });
         });
@@ -229,7 +229,7 @@ function getAlertLogicSecurityGroup(accountId, environmentId, vpcId, ec2, result
             ]
         },
         result = null;
-
+    reportDebug("Getting '" + alSecurityGroupName + "' for '" + vpcId + "'.");
     async.during(
         function describeGroup(callback) {
             executeAwsApi(ec2.describeSecurityGroups.bind(ec2), params, function(err, data) {
@@ -241,6 +241,7 @@ function getAlertLogicSecurityGroup(accountId, environmentId, vpcId, ec2, result
                     // Return Alert Logic security group id
                     if (data.SecurityGroups.length) {
                         result = data.SecurityGroups[0].GroupId;
+                        reportDebug("'" + alSecurityGroupName + "' group id is '" + result + "' for '" + vpcId + "'.");
                         return callback(null, false);
                     } else {
                         if (alSecurityGroupName === getAlertLogicSecurityGroupName(accountId, environmentId)) {
@@ -446,7 +447,7 @@ function removeEnvironmentProtection(alProtectionGroup, vpcId, environmentId, ec
  * Disable scanning by Alert Logic Security Appliance
  */
 
-function removeVpcProtection(instancesSet, alProtectionGroupId, vpcId, ec2, resultCallback) {
+function removeVpcProtection(instancesSet, alProtectionGroup, vpcId, ec2, resultCallback) {
     "use strict";
     async.waterfall([
         function (callback) {
@@ -459,20 +460,100 @@ function removeVpcProtection(instancesSet, alProtectionGroupId, vpcId, ec2, resu
             reportDebug("Disabling protection for instances in '" + vpcId + "' VPC. Exclude: '" +
                          instances.toString() + "'.");
             updateInstancesProtection(
-                        false, instances, alProtectionGroupId, vpcId, ec2, callback);
+                        false, instances, alProtectionGroup.GroupId, vpcId, ec2, callback);
         },
-        function(result, callback) {
-            executeAwsApi(ec2.deleteSecurityGroup.bind(ec2), {"GroupId": alProtectionGroupId}, function(err, data) {
-                if (err) {
-                    reportError("Failed to deleted '" + alProtectionGroupId + "'. Error: " + JSON.stringify(err));
-                } else {
-                    reportStatus("Deleted '" + alProtectionGroupId + "'.");
-                } 
+        function (callback) {
+            // remove references to the alSecurityGroup from the protection group
+            revokeSecurityGroupProtection(alProtectionGroup, vpcId, ec2, callback);
+        },
+        function(alSecurityGroupId, callback) {
+            for (var i = 0; i < alProtectionGroup.Tags.length; i++) {
+                var tag = alProtectionGroup.Tags[i];
+                if (tag.Key === "Name" || tag.Key === config.environmentId) {continue;}
+                reportStatus("Not removing '" + alProtectionGroup.GroupId +
+                             "' group since it provides protection for at least one more environment. EnvironmentId: '" +
+                             tag.Key + "'.");
                 return callback(null);
+            }
+
+            executeAwsApi(ec2.deleteSecurityGroup.bind(ec2), {"GroupId": alProtectionGroup.GroupId},
+                function(err, data) {
+                    if (err) {
+                        reportError("Failed to deleted '" + alProtectionGroup.GroupId +
+                                    "'. Error: " + JSON.stringify(err));
+                        return callback(err);
+                    } else {
+                        reportStatus("Deleted '" + alProtectionGroup.GroupId + "'.");
+                        // Delete Alert Logic's security group for this environment
+                        executeAwsApi(ec2.deleteSecurityGroup.bind(ec2), {"GroupId": alSecurityGroupId},
+                            function(err, data) {
+                                if (err) {
+                                    reportError("Failed to deleted '" + alSecurityGroupId+
+                                                "'. Error: " + JSON.stringify(err));
+                                } else {
+                                    reportStatus("Deleted '" + alSecurityGroupId + "'.");
+                                }
+                                return callback(err, data);
+                            }
+                        );
+                    }
+                }
+            );
+        }
+    ], function(err, data) {
+        return resultCallback(err, data); 
+    });
+}
+
+function revokeSecurityGroupProtection(alProtectionGroup, vpcId, ec2, resultCallback) {
+    "use strict";
+    async.waterfall([
+        function (callback) {
+            // get alert logic security group id
+            getAlertLogicSecurityGroup(config.accountId, config.environmentId, vpcId, ec2, callback);
+        },
+        function (alSecurityGroupId, callback) {
+            // get all the instances running with alert logic security group id
+            var params = {
+                Filters: [{"Name": "vpc-id", "Values": [vpcId]}, {"Name": "network-interface.group-id", "Values": [alSecurityGroupId]}]
+            };
+            reportDebug("Calling describeInstances with filter: '" + JSON.stringify(params) + "'");
+            executeAwsApi(ec2.describeInstances.bind(ec2), params, function (err, data) {
+                if (err) {
+                    reportError("Failed to get Alert Logic Appliances list. Error: " + JSON.stringify(err));
+                    return callback(err);
+                }
+                // retrun null if there are instances running with alSecurityGroupId
+                return callback(null, data.Reservations.length ? null : alSecurityGroupId);
+            });
+        },
+        function (alSecurityGroupId, callback) {
+            if (!alSecurityGroupId) {return callback(null, alSecurityGroupId);}
+
+            // Remove ingress rule to alSecurity Group
+            var params = {
+                "GroupId": alProtectionGroup.GroupId,
+                    "IpPermissions":  [{
+                        "FromPort":   -1,
+                        "ToPort":     -1,
+                        "IpProtocol": "-1",
+                        "UserIdGroupPairs": [
+                            {"GroupId": alSecurityGroupId}
+                        ]
+                    }]
+                };
+            executeAwsApi(ec2.revokeSecurityGroupIngress.bind(ec2), params, function(err, data) {
+                if (err) {
+                    reportError("Failed to remove ingress rule to '" + alSecurityGroupId + "' from '" +
+                                alProtectionGroup.GroupId + "'. Error: " + JSON.stringify(err));
+                    return callback(err);
+                }
+                reportStatus("Successfully removed ingress rule to '" + alSecurityGroupId + "' from '" + alProtectionGroup.GroupId + "'.");
+                return callback(null, alSecurityGroupId);
             });
         }
-    ], function(err) {
-        return resultCallback(err); 
+    ], function(err, alSecurityGroupId) {
+        return resultCallback(err, alSecurityGroupId);
     });
 }
 
@@ -627,7 +708,7 @@ function log(status, msg) {
     "use strict";
     var prefix = "[" + config.accountId + ":" +
                  config.environmentId + ":" +
-                 checkName + "]";
+                 checkName + "] - ";
     switch (status) {
         case 'debug':
             if (debug) {

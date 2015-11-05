@@ -2,7 +2,6 @@ require('zlib');
 var async           = require('async'),
     AWS             = require('aws-sdk'),
     zlib            = require('zlib'),
-//    winston         = require('winston'),
     config          = require('./config.js'),
     getToken        = require('./utilities/token.js'),
     sources         = require('./utilities/sources.js'),
@@ -15,7 +14,7 @@ exports.handler = function(event, context) {
         subject = record.Sns.Subject,
         message = JSON.parse(event.Records[0].Sns.Message);
    
-    console.log("Received '%s' event", subject);
+    console.log("Received '%s' event", JSON.stringify(record));
 
     if (!isSupportedEvent(message)) {
         console.log("'" + subject + "' is not supported"); 
@@ -47,7 +46,28 @@ exports.handler = function(event, context) {
                     });
                 },
                 function processMyAccountSources(rows, callback) {
-                    console.log("Getting environments for '" + awsAccountId + "'.");
+                    console.log("Getting environments for '" + awsAccountId + "'. Number of active environments: '" + rows.length + "'.");
+                    var deletedEnvironmentId = getDeletedAlertLogicAppliance(config.accountId, message);
+                    if (deletedEnvironmentId) {
+                        // This is a delete instance event for Alert Logic's security appliance for our account.
+                        var params          = {
+                            "token":            token,
+                            "accountId":        config.accountId,
+                            "environmentId":    deletedEnvironmentId,
+                            "record":           record,
+                            "awsRegion":        awsRegion,
+                            "snapshotEvent":    false,
+                            "assetTypes":       supportedAssetTypesHashtable
+                        };
+
+                        return processAwsConfigEvent(
+                                    params,
+                                    message,
+                                    function(err, result) {
+                                        handleCompletionCallback(err, event, context);
+                                    });
+                    }
+
                     var sourcesAsync = require('async');
                     sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
                         var source = row.source;
@@ -76,8 +96,8 @@ exports.handler = function(event, context) {
                         },
                         function(err) {
                             if (err) {
-                                console.error("Failed to process environments for '%s' accountId.",
-                                              config.accountId);
+                                console.error("Failed to process environments for '%s' accountId. Error: '%s'",
+                                              config.accountId, JSON.stringify(err));
                             } else {
                                 console.log("Finished processing environments for '%s' accountId",
                                             config.accountId);
@@ -87,22 +107,15 @@ exports.handler = function(event, context) {
                     );
                 }
             ], function (err) {
-                if (err) {
-                    console.error("Failed to process AWS Config Event: " + JSON.stringify(event, null, 2) +
-                                  ". Error: " + JSON.stringify(err));
-                    context.fail();
-                } else {
-                    console.log("Successfully dispatched AWS Config Event.");
-                    context.succeed();
-                }
+                handleCompletionCallback(err, event, context);
             }
         );
     });
 };
 
-// function processAwsConfigEvent(token, accountId, environmentId, record, message, callback) {
 function processAwsConfigEvent(params, message, callback) {
     "use strict";
+    console.log("Processing '%s' message.", params.environmentId);
     assets.getRegionsInScope(params.token, params.environmentId, function(status, regions) {
         if (status !== "SUCCESS") {
             console.error("Unable to retreive regions in scope. Error: " + status);
@@ -118,19 +131,17 @@ function processAwsConfigEvent(params, message, callback) {
             message.configurationItem.hasOwnProperty('resourceType')) {
             
             if (!params.assetTypes.hasOwnProperty(message.configurationItem.resourceType)) {
-                return callback("SUCCESS");
+                console.log("'" + message.configurationItem.resourceType + "' resource type is unsupported.");
+                return callback(null);
             }
 
             /*
             * Process single configuration item
             */
-            /*
-            params.awsRegion   = message.configurationItem.awsRegion !== null ?
-                                 message.configurationItem.awsRegion :
-                                 getAwsRegionFromArn(params.record.Sns.TopicArn);
-            */
             return analyze(params, function(status, vpcs) { 
                 if (status !== "SUCCESS") {
+                    console.error("Failed to get protected VPCs for '%s' environment in '%s' region. Error: %s",
+                                params.environmentId, params.awsRegion, JSON.stringify(status)); 
                     return callback(status);
                 }
                 params.message  = message;
@@ -143,7 +154,6 @@ function processAwsConfigEvent(params, message, callback) {
             /*
             * Process all configration items in stored in S3 object
             */
-            //// params.awsRegion = getAwsRegionFromArn(params.record.Sns.TopicArn);
             params.snapshotEvent = true;
             return analyze(params, function(status, vpcs) { 
                 if (status !== "SUCCESS") {
@@ -225,6 +235,29 @@ function processSnapshot(args, message, resultCallback) {
             }
     });
 }
+
+function getDeletedAlertLogicAppliance(accountId, message) {
+    "use strict";
+    if (message.configurationItem.resourceType === "AWS::EC2::Instance" &&
+        message.configurationItem.configurationItemStatus === "ResourceDeleted") {
+
+        var configuration   = message.configurationItemDiff.changedProperties.Configuration.previousValue,
+            environmentId   = null;
+        for (var i = 0; i < configuration.tags.length; i++) {
+            if (configuration.tags[i].key === "AlertLogic-AccountID" && configuration.tags[i].value !== accountId) {
+                // This is Alert Logic appliance for our account
+                return null;
+            }
+            if (configuration.tags[i].key === "AlertLogic-EnvironmentID") {
+                environmentId = configuration.tags[i].value;
+            }
+        }
+        return environmentId;
+    } else {
+        return null;
+    }
+}
+
 function callWorker(args, callback) {
     "use strict";
     AWS.config.update({region: args.awsRegion});
@@ -234,15 +267,18 @@ function callWorker(args, callback) {
             "InvokeArgs": JSON.stringify(args)
         };
 
-    //// console.log("Calling '" + params.FunctionName + "' function in '" + args.awsRegion + "' region for ");
-    console.log("Calling '%s' function for '%s' environment.", params.FunctionName, args.environmentId);
+    console.log("Calling '%s' function for '%s' environment. ResourceType: '%s', ResourceId: '%s'.",
+                params.FunctionName, args.environmentId,
+                args.message.configurationItem.resourceType, args.message.configurationItem.resourceId);
     lambda.invokeAsync(params, function(err, data) {
         if (err) {
             console.error("Failed to invoke lambda function for '" + args.environmentId +
                           "' environment. " + "Error: " + JSON.stringify(err));
         } else {
-            console.log("Lambda execution for '" + params.FunctionName +
-                         "' returned '" + data.Status + "'.");
+            if (data.Status !== 202) {
+                console.log("Lambda execution for '" + params.FunctionName +
+                             "' returned '" + data.Status + "'.");
+            }
         }
         return callback(null);
     });
@@ -264,6 +300,18 @@ function analyze(params, callback) {
             callback(status);
         }
     });
+}
+
+function handleCompletionCallback(err, event, context) {
+    "use strict";
+    if (err) {
+        console.error("Failed to process AWS Config Event: " + JSON.stringify(event, null, 2) +
+                      ". Error: " + JSON.stringify(err));
+        context.fail();
+    } else {
+        console.log("Successfully dispatched AWS Config Event.");
+        context.succeed();
+    }
 }
 
 function isSupportedEvent(message) {
