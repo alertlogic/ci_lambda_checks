@@ -238,7 +238,10 @@ function processSnapshot(args, message, resultCallback) {
 
 function getDeletedAlertLogicAppliance(accountId, message) {
     "use strict";
-    if (message.configurationItem.resourceType === "AWS::EC2::Instance" &&
+    if (message &&
+        message.hasOwnProperty("configurationItem") &&
+        message.configurationItem.hasOwnProperty("resourceType") && 
+        message.configurationItem.resourceType === "AWS::EC2::Instance" &&
         message.configurationItem.configurationItemStatus === "ResourceDeleted") {
 
         var configuration   = message.configurationItemDiff.changedProperties.Configuration.previousValue,
