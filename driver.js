@@ -264,13 +264,14 @@ function callWorker(args, callback) {
     var lambda  = new AWS.Lambda({apiVersion: '2015-03-31'}),
         params = {
             "FunctionName": "ci_checks_worker_" + args.accountId,
-            "InvokeArgs": JSON.stringify(args)
+            "InvocationType":    'RequestResponse',
+            "Payload": JSON.stringify(args)
         };
 
     console.log("Calling '%s' function for '%s' environment. ResourceType: '%s', ResourceId: '%s'.",
                 params.FunctionName, args.environmentId,
                 args.message.configurationItem.resourceType, args.message.configurationItem.resourceId);
-    lambda.invokeAsync(params, function(err, data) {
+    lambda.invoke(params, function(err, data) {
         if (err) {
             console.error("Failed to invoke lambda function for '" + args.environmentId +
                           "' environment. " + "Error: " + JSON.stringify(err));

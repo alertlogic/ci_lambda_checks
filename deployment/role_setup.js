@@ -344,6 +344,7 @@ function getLambdaPolicies(lambdaSetup) {
                             "ec2:DeleteSecurityGroup",
                             "ec2:AuthorizeSecurityGroupIngress",
                             "ec2:RevokeSecurityGroupIngress",
+                            "ec2:RevokeSecurityGroupEgress",
                             "ec2:CreateTags",
                             "ec2:DeleteTags"
                         ],

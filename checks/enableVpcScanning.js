@@ -375,6 +375,29 @@ function authorizeSecurityGroupProtection(accountId, environmentId, alProtection
                     return callback(null);
                 }
             });
+        },
+        function updateEgressRules(callback) {
+             var params = {
+                    GroupId: alProtectionGroup.GroupId,
+                        IpPermissions:  [{
+                            FromPort:   -1,
+                            ToPort:     -1,
+                            IpProtocol: "-1",
+                            IpRanges:   [
+                                {CidrIp: "0.0.0.0/0"}
+                            ]
+                        }]
+                };
+            executeAwsApi(ec2.revokeSecurityGroupEgress.bind(ec2), params, function(err, data) {
+                if (err && err.code !== 'InvalidPermission.Duplicate') {
+                    reportError("Failed to update egress rules for '" + alProtectionGroup.GroupId +
+                                "'. Error: " + JSON.stringify(err));
+                    return callback(null);
+                } else {
+                    reportStatus("Removed egress rule for '0.0.0.0/0' from '" + alProtectionGroup.GroupId + "'.");
+                    return callback(null);
+                }
+            });
         }
     ], function (err, result) {
         return resultCallback(err, alProtectionGroup.GroupId);
