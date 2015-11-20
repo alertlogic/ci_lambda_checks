@@ -46,7 +46,8 @@ var source = {
  * Create the node_modules directory so that it exists for installation regardless of module definitions for deployment
  */
 mkdirp(deploy + 'node_modules/', function (err) {
-    execfile('npm', ['install', '--production', '--prefix', 'target/ci_lambda_checks', './'], function(err, stdout) {});
+    fs.createReadStream('./package.json').pipe(fs.createWriteStream('./target/ci_lambda_checks/package.json'));
+    execfile('npm', ['install', '--only=production', '--prefix', 'target/ci_lambda_checks'], function(err, stdout) {});
     if (err) {
         return onErr(err);
     }
