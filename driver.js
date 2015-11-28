@@ -265,10 +265,11 @@ function callWorker(args, callback) {
     "use strict";
     AWS.config.update({region: args.awsRegion});
     var lambda  = new AWS.Lambda({apiVersion: '2015-03-31'}),
+        payload = JSON.stringify(args),
         params = {
             "FunctionName": "ci_checks_worker_" + args.accountId,
-            "InvocationType":    'RequestResponse',
-            "Payload": JSON.stringify(args)
+            "InvocationType": (payload.length < 128000) ? 'Event' : 'RequestResponse',
+            "Payload": payload
         };
 
     console.log("Calling '%s' function for '%s' environment. ResourceType: '%s', ResourceId: '%s'.",
