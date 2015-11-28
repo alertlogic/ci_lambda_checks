@@ -25,7 +25,7 @@ var publishResult = function(token, metadata, result, callback) {
                 }
             };
 
-        console.log("Payload: " + payload);
+        // console.log("Payload: " + payload);
         var postExposure = https.request(options, function(res){
             var responseString = "";
             res.setEncoding('utf-8');
