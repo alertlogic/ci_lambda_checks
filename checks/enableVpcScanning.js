@@ -329,7 +329,7 @@ function getProtectionSecurityGroup(createFlag, vpcId, ec2, resultCallback) {
 
 function authorizeSecurityGroupProtection(accountId, environmentId, alProtectionGroup, alSecurityGroupId, ec2, resultCallback) {
     "use strict";
-    async.parallel([
+    async.waterfall([
         function updateTags(callback) {
             var params = {
                 "Resources": [alProtectionGroup.GroupId],
@@ -376,8 +376,35 @@ function authorizeSecurityGroupProtection(accountId, environmentId, alProtection
                 }
             });
         },
-        function updateEgressRules(callback) {
-             var params = {
+        function getEgressRules(callback) {
+            executeAwsApi(ec2.describeSecurityGroups.bind(ec2), {GroupIds: [alProtectionGroup.GroupId]}, function(err, data) {
+                if (err) {
+                    reportError("Failed to call describe for '" + alProtectionGroup.GroupId + "'. Error: " +
+                                JSON.stringify(err));
+                    return callback(null, 'false');
+                }
+                var egressRules = data.SecurityGroups[0].IpPermissionsEgress;
+                for (var i = 0; i < egressRules.length; i++) {
+                    if (egressRules[i].IpProtocol !== "-1") {continue;}
+
+                    for (var l = 0; l < egressRules[i].IpRanges.length; l++) {
+                        if (egressRules[i].IpRanges[l].CidrIp === "0.0.0.0/0") {
+                            reportStatus("Found egress rule open to the world. Scheduling removal.");
+                            return callback(null, 'true');
+                        }
+                    }
+                }
+                reportStatus("Not found egress rule open to the world.");
+                return callback(null, 'false');
+            });
+        },
+        function updateEgressRules(removeEngressRule, callback) {
+            if (removeEngressRule === 'false') {
+                reportStatus("Skip removing egress rules for '" + alProtectionGroup.GroupId + "' security group.");
+                return callback(null);
+            }
+
+            var params = {
                     GroupId: alProtectionGroup.GroupId,
                         IpPermissions:  [{
                             FromPort:   -1,
