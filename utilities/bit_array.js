@@ -100,6 +100,40 @@ BitArray.prototype.toString = function () {
     return s;
 };
 
+// Get indexes of the set bits
+BitArray.prototype.getIndexes = function () {
+    "use strict";
+    var s           = [], //new Array();
+        index       = -1,
+        counter     = 0;
+
+    for (var i = 0; i < this.m_bits.length; i++) {
+        if (this.m_bits[i] === BitArray._ON) {
+            if (index === -1) {
+                index = i;
+                counter = 0;
+            } else {
+                counter++;
+            }
+        } else {
+            if (!counter && index >= 0) {
+                s.push(index);
+            } else if (index >= 0) {
+                s.push(index + "-" + (index + counter));
+            }
+            index = -1;
+        }
+    }
+    if (index >= 0) {
+        if (counter) {
+            s.push(index + "-" + (index + counter));
+        } else {
+            s.push(index);
+        }
+    }
+    return s;
+};
+
 // Get the numeric value
 BitArray.prototype.toNumber = function () {
     "use strict";

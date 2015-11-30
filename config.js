@@ -2,12 +2,15 @@
  * Configuration of identification for account, user, environment, and checks
  */
 var config = {
+    "identifier": "pavel@alertlogic.com",
+    "secret": "1newP@ssword",
     /*
      * Cloud Insight API URL
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    "api_url": "api.cloudinsight.alertlogic.com",
+    "api_url": "api.product.dev.alertlogic.com",
+    // "api_url": "api.cloudinsight.alertlogic.com",
 
     /*
      * Supported Regions for AWS Lambda
@@ -119,7 +122,6 @@ var config = {
                 reference:"http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html",
                 pci_concern:"N/A",
                 ccss_vector: "N/A",
-                evidence: "{sg_configuration,0}",
                 type : "application/json"
             }
         },
