@@ -76,16 +76,25 @@ exports.handler = function(args, context) {
             try {
                 var test = require('./checks/' + check.name.toString() + '.js'),
                     metadata = getMetadata(check.name.toString(), awsRegion, resourceType, resourceId);
-                winston.debug("Worker [%s:%s]: Executing '%s' custom check. ResourceType: '%s', ResourceId: '%s'",
+                console.log("Worker [%s:%s]: Executing '%s' custom check. ResourceType: '%s', ResourceId: '%s'",
                               config.accountId, config.environmentId, check.name.toString(), resourceType, resourceId);
 
                 test(snapshotEvent, inScope, awsRegion, vpcId, rawMessage, function(err, result) {
                     if (err) {
-                        winston.error("Worker [%s:%s]: '%s' custom check failed. Error: %s",
-                                      config.accountId, config.environmentId, check.name.toString(), JSON.stringify(err));
+                        console.log("Worker [%s:%s]: '%s' custom check failed. Error: %s",
+                                    config.accountId, config.environmentId,
+                                    check.name.toString(), JSON.stringify(err));
                         return callback();
                     } else {
-                        if (result === true) {
+                        console.log("Worker [%s:%s]: '%s' custom check returned: %s. Typeof: %s",
+                                    config.accountId, config.environmentId,
+                                    check.name.toString(), JSON.stringify(result),
+                                    typeof result);
+                        if (typeof result === 'object' && result.vulnerable === true) {
+                            var vulnerability = check.vulnerability;
+                            vulnerability.evidence = JSON.stringify(result.evidence);
+                            publishResult(token, metadata, [vulnerability], callback);
+                        } else if (result === true) {
                             // Publish a result against the available metadata
                             publishResult(token, metadata, [check.vulnerability], callback);
                         } else {
