@@ -282,7 +282,7 @@ function callWorker(args, callback) {
         } else {
             if (data.Status !== 202) {
                 console.log("Lambda execution for '" + params.FunctionName +
-                             "' returned '" + data.Status + "'.");
+                             "' returned '" + JSON.stringify(data) + "'.");
             }
         }
         return callback(null);
