@@ -18,6 +18,15 @@ var api               = require('./api.js'),
             case "AWS::EC2::VPC":
                 assetType = "vpc";
                 break;
+            case "AWS::EC2::NetworkAcl":
+                assetType = "acl";
+                break;
+            case "AWS::EC2::RouteTable":
+                assetType = "route";
+                break;
+            case "AWS::EC2::InternetGateway":
+                assetType = "igw";
+                break;
             default:
                 assetType = null;
                 break;

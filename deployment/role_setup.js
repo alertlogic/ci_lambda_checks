@@ -354,6 +354,25 @@ function getLambdaPolicies(lambdaSetup) {
                     }
                 ]
             }
+        },
+        {
+            name: "aws_config_read_only_policy",
+            policyDocument: {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "config:Describe*",
+                            "config:Get*",
+                            "config:List*"
+                        ],
+                        "Resource": [
+                            "*"
+                        ]
+                    }
+                ]
+            }
         }
     ];
 

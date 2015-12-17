@@ -36,7 +36,8 @@ var publishResult = function(token, metadata, result, callback) {
                 if(res.statusCode === 201) {
                     console.log('Vulnerability Instance Id: ' + responseString + '\n');
                 } else {
-                    console.log("Failed to create Vulnerability Instance. StatusCode: " + res.statusCode);
+                    console.log("Failed to create Vulnerability Instance. StatusCode: " + res.statusCode + ", Message: " + res.statusMessage);
+                    console.log("Options: " + JSON.stringify(options) + "\nPayload: " + payload);
                 }
                 return callback();
             });

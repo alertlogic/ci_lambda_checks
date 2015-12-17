@@ -18,7 +18,7 @@
     "type": "git",
     "url": "git@github.com:alertlogic/ci_lambda_checks.git"
   },
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "engines": {
     "node": "0.12.7"
