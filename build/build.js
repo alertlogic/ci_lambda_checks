@@ -57,27 +57,23 @@ mkdirp(deploy + 'node_modules/', function (err) {
  * Execute glob based distribution of source files
  */
 for ( var section in source ) {
-    switch (section) {
-        default:
-            glob.sync(source[section]).forEach(function(item) {
-                mkdirp(path.dirname(item.replace(base, deploy)), function (err) {
-                    if (err) {
-                        return onErr(err);
-                    } else {
-                        switch (this.section) {
-                            case 'application':
-                                var minified = uglifyjs.minify(item, {mangle: false});
-                                fs.writeFile(item.replace(base, deploy), minified.code.replace('release.version', pkg.version));
-                                break;
-                            default:
-                                fs.createReadStream(item).pipe(fs.createWriteStream(item.replace(base, deploy)));
-                                break;
-                        }
-                    }
-                }.bind({section: section}));
-            });
-            break;
-    }
+    glob.sync(source[section]).forEach(function(item) {
+        mkdirp(path.dirname(item.replace(base, deploy)), function (err) {
+            if (err) {
+                return onErr(err);
+            } else {
+                switch (this.section) {
+                    case 'application':
+                        var minified = uglifyjs.minify(item, {mangle: false});
+                        fs.writeFile(item.replace(base, deploy), minified.code.replace('release.version', pkg.version));
+                        break;
+                    default:
+                        fs.createReadStream(item).pipe(fs.createWriteStream(item.replace(base, deploy)));
+                        break;
+                }
+            }
+        }.bind({section: section}));
+    });
 }
 
 /*
