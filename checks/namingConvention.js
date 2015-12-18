@@ -1,5 +1,5 @@
 var config            = require('../config.js'),
-    namingConvention = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback) {
+    namingConvention = function(_eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
     "use strict";
     var result = {vulnerable: false, evidence: []};
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||

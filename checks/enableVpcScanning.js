@@ -6,7 +6,7 @@ var config                  = require('../config.js'),
     checkName               = "enableVpcScanning",
     debug                   = true;
 
-var enableVpcScanning   = function(snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback)  {
+var enableVpcScanning   = function(eventType, inScope, awsRegion, vpcId, rawMessage, callback)  {
     "use strict";
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
         rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered" ||
@@ -14,10 +14,10 @@ var enableVpcScanning   = function(snapshotEvent, inScope, awsRegion, vpcId, raw
         
         switch (rawMessage.configurationItem.resourceType) {
             case "AWS::EC2::VPC":
-                if (!snapshotEvent) {break;}
+                if (eventType !== 'snapshotEvent') {break;}
                 return handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback);
             case "AWS::EC2::Instance":
-                if (snapshotEvent) {break;}
+                if (eventType !== 'configurationItem') {break;}
                 return handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback);
             default:
                 reportError("Recieved event for unsupported '" + rawMessage.configurationItem.resourceType + "' resource type.");
@@ -439,7 +439,8 @@ function getInstances(includeTags, excludeTags, vpcId, ec2, callback) {
     }
     executeAwsApi(ec2.describeInstances.bind(ec2), {"Filters": filters}, function (err, data) {
         if (err) {
-            reportError("Failed to get Alert Logic Appliances list. Error: " + JSON.stringify(err));
+            reportError("Failed to get Alert Logic Appliances list. Filters: '" + JSON.stringify(filters) +
+                        "'. Error: " + JSON.stringify(err));
             return callback(err);
         }
         else {
@@ -570,7 +571,8 @@ function revokeSecurityGroupProtection(alProtectionGroup, vpcId, ec2, resultCall
             reportDebug("Calling describeInstances with filter: '" + JSON.stringify(params) + "'");
             executeAwsApi(ec2.describeInstances.bind(ec2), params, function (err, data) {
                 if (err) {
-                    reportError("Failed to get Alert Logic Appliances list. Error: " + JSON.stringify(err));
+                    reportError("Failed to get Alert Logic Appliances list. Params: '" + JSON.stringify(params) +
+                                "'. Error: " + JSON.stringify(err));
                     return callback(err);
                 }
                 // retrun null if there are instances running with alSecurityGroupId
@@ -713,7 +715,7 @@ function executeAwsApiEx(fun, params, callback, lastError, retries) {
     }
 
     fun(params, function(err, data) {
-        if (err && err.code === 'RequestLimitExceeded') {
+        if (err && (err.code === 'RequestLimitExceeded' || err.code === 'InternalError')) {
             setTimeout(function() {
                 return executeAwsApiEx(fun, params, callback, err, retries - 1);
             }, 3000);

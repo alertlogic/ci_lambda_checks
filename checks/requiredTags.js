@@ -1,5 +1,5 @@
 var config            = require('../config.js'),
-    requiredTags      = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback) {
+    requiredTags      = function(_eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
     "use strict";
     var evidence = [];
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||

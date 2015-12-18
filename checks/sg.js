@@ -1,6 +1,6 @@
 var BitArray       = require('../utilities/bit_array.js'),
     config         = require('../config.js'),
-    sg             = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback)  {
+    sg             = function(_eventType, inScope, awsRegion, vpcId, rawMessage, callback)  {
     "use strict";
     var result = {vulnerable: false, evidence: []};
     if (rawMessage.configurationItem.configurationItemStatus === "OK" ||

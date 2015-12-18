@@ -1,42 +1,58 @@
 var config          = require('../config.js'),
     AWS             = require('aws-sdk'),
     checkName       = "awsConfigRules",
-    awsConfigRules  = function(_snapshotEvent, inScope, awsRegion, vpcId, rawMessage, callback) {
+    awsConfigRules  = function(eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
     "use strict";
-    AWS.config.update({region: awsRegion});
-
-    var awsConfig       = new AWS.ConfigService(),
-        params      = {
-            "ResourceId":   rawMessage.configurationItem.resourceId,
-            "ResourceType": rawMessage.configurationItem.resourceType
-        };
-
-    console.log("awsConfigRules: Analyzing: '" + JSON.stringify(params) +
-                "'. Item Status: '" + rawMessage.configurationItem.configurationItemStatus + "'.");
-    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
-        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
-        
-        executeAwsApi(awsConfig.getComplianceDetailsByResource.bind(awsConfig), params, function(err, result) {
-            if (err) {
-                console.log("awsConfigRules check failed. ResourceId: '" + rawMessage.configurationItem.resourceId +
-                            "', Region: '" + awsRegion + "'. getComplianceDetailsByResource returned: " + JSON.stringify(err));
-                return callback(null, false);
-            }
-            var vulnerabilities = [];
-            for (var i = 0; i < result.EvaluationResults.length; i++) {
-                console.log("Resource '" + JSON.stringify(params) + "' is " + result.EvaluationResults[i].ComplianceType);
-                if (result.EvaluationResults[i].ComplianceType === "COMPLIANT") {
-                    continue;
-                }
-                vulnerabilities.push(getVulnerability(result.EvaluationResults[i].EvaluationResultIdentifier));
-            }
-            if (vulnerabilities.length) {
-                return callback(null, {vulnerable: true, vulnerabilities: vulnerabilities});
-            } else {
-                return callback(null, false);
-            }
-        }); 
+    if (!inScope) {
+        return callback(null, false);
     }
+
+    AWS.config.update({region: awsRegion});
+    var awsConfig       = new AWS.ConfigService(),
+        params = {};
+    switch (eventType) {
+        case 'configRule':
+            params      = {
+                "ResourceId":   rawMessage.resourceId,
+                "ResourceType": rawMessage.resourceType
+            };
+            break;
+        case 'snapshotEvent':
+        case 'configurationItem':
+            if (rawMessage.configurationItem.configurationItemStatus !== "OK" && 
+                    rawMessage.configurationItem.configurationItemStatus !== "ResourceDiscovered") {
+                return callback(null, false);
+            }
+            params      = {
+                "ResourceId":   rawMessage.configurationItem.resourceId,
+                "ResourceType": rawMessage.configurationItem.resourceType
+            };
+            break;
+        default:
+            return callback(null, false);
+    }
+
+    console.log("awsConfigRules: Analyzing: '" + JSON.stringify(params));
+    executeAwsApi(awsConfig.getComplianceDetailsByResource.bind(awsConfig), (eventType === 'snapshotEvent') ? 0 : 60000, params, function(err, result) {
+        if (err) {
+            console.log("awsConfigRules check failed. ResourceId: '" + rawMessage.configurationItem.resourceId +
+                        "', Region: '" + awsRegion + "'. getComplianceDetailsByResource returned: " + JSON.stringify(err));
+            return callback(null, false);
+        }
+        var vulnerabilities = [];
+        for (var i = 0; i < result.EvaluationResults.length; i++) {
+            console.log("Resource '" + JSON.stringify(params) + "' is " + result.EvaluationResults[i].ComplianceType);
+            if (result.EvaluationResults[i].ComplianceType === "COMPLIANT") {
+                continue;
+            }
+            vulnerabilities.push(getVulnerability(result.EvaluationResults[i].EvaluationResultIdentifier));
+        }
+        if (vulnerabilities.length) {
+            return callback(null, {vulnerable: true, vulnerabilities: vulnerabilities});
+        } else {
+            return callback(null, false);
+        }
+    }); 
 };
 
 function getVulnerability(evaluationResult) {
@@ -81,9 +97,11 @@ function getResourceTypeScope(resourceType) {
     }
 }
 
-function executeAwsApi(fun, params, callback) {
+function executeAwsApi(fun, delay, params, callback) {
     "use strict";
-    return executeAwsApiEx(fun, params, callback, null, 10);
+    setTimeout(function() {
+        return executeAwsApiEx(fun, params, callback, null, 10);
+    }, delay);
 }
 
 function executeAwsApiEx(fun, params, callback, lastError, retries) {
@@ -97,6 +115,7 @@ function executeAwsApiEx(fun, params, callback, lastError, retries) {
         if (err) {
             switch(err.code) {
                 case 'RequestLimitExceeded':
+                case 'InternalError':
                 case 'ThrottlingException':
                     setTimeout(function() {
                         return executeAwsApiEx(fun, params, callback, err, retries - 1);

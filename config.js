@@ -29,6 +29,7 @@ var config = {
         "sg": {
             "name": "sg",
             "enabled": true,
+            "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": [
                     "AWS::EC2::SecurityGroup"
@@ -58,6 +59,7 @@ var config = {
         "namingConvention": {
             "name": "namingConvention",
             "enabled": true,
+            "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 /*
                 * Your callback will only be called when message are received for the following AWS resource types
@@ -93,6 +95,7 @@ var config = {
         "requiredTags": {
             "name": "requiredTags",
             "enabled": true,
+            "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"],
                 "policies": [
@@ -126,7 +129,7 @@ var config = {
         "enableVpcScanning": {
             "name": "enableVpcScanning",
             "enabled": false,
-            "mode": "snapshot",
+            "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::VPC", "AWS::EC2::Instance"]
             }
@@ -134,6 +137,7 @@ var config = {
         "awsConfigRules": {
             "name": "awsConfigRules",
             "enabled": true,
+            "mode": ["configurationItem", "snapshotEvent", "configRule"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance",
                                   "AWS::EC2::NetworkAcl", "AWS::EC2::RouteTable", "AWS::EC2::VPC",
