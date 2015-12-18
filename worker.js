@@ -9,14 +9,30 @@ exports.handler = function(args, context) {
     "use strict";
     
     var rawMessage      = args.message,
-        resourceType    = rawMessage.configurationItem.resourceType,
-        resourceId      = rawMessage.configurationItem.resourceId,
         token           = args.token,
         awsRegion       = args.awsRegion,
         vpcs            = args.vpcs,
-        snapshotEvent   = args.snapshotEvent,
+        eventType       = args.eventType,
+        resourceType    = "",
+        resourceId      = "",
         vpcId           = null,
         inScope         = true;
+
+    switch(eventType) {
+        case 'configRule':
+            resourceType    = rawMessage.resourceType;
+            resourceId      = rawMessage.resourceId;
+            break;
+        case 'snapshotEvent':
+        case 'configurationItem':
+            resourceType    = rawMessage.configurationItem.resourceType;
+            resourceId      = rawMessage.configurationItem.resourceId;
+            break;
+        default:
+            winston.error("Worker [%s:%s]: Unsupported message: '%s', Args: '%s'", 
+                          config.accountId, config.environmentId, JSON.stringify(rawMessage), JSON.stringify(args));
+            return context.fail();
+    }
 
     config.accountId       = args.accountId;
     config.environmentId   = args.environmentId;
@@ -24,7 +40,7 @@ exports.handler = function(args, context) {
 
     if (resourceType === "AWS::EC2::VPC") {
         vpcId = resourceId;
-    } else {
+    } else if (eventType === "configurationItem") {
         if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
             // Deleted resources have a different config item layout
             vpcId = rawMessage.configurationItemDiff.changedProperties.Configuration.previousValue.vpcId;
@@ -72,6 +88,13 @@ exports.handler = function(args, context) {
                              config.accountId, config.environmentId, check.name.toString(), resourceType, check.configuration.resourceTypes.toString()); 
                 return callback();
             }
+            
+            var checkMode = getCheckMode(check); 
+            if (!isValidMode(checkMode, eventType)) {
+                winston.info("Worker [%s:%s]: Skipping execution of the check '%s'. EventType: '%s'. Supported types: '%s'",
+                             config.accountId, config.environmentId, check.name.toString(), eventType, checkMode); 
+                return callback();
+            }
 
             try {
                 var test = require('./checks/' + check.name.toString() + '.js'),
@@ -79,7 +102,7 @@ exports.handler = function(args, context) {
                 winston.debug("Worker [%s:%s]: Executing '%s' custom check. ResourceType: '%s', ResourceId: '%s'",
                               config.accountId, config.environmentId, check.name.toString(), resourceType, resourceId);
 
-                test(snapshotEvent, inScope, awsRegion, vpcId, rawMessage, function(err, result) {
+                test(eventType, inScope, awsRegion, vpcId, rawMessage, function(err, result) {
                     if (err) {
                         winston.error("Worker [%s:%s]: '%s' custom check failed. Error: %s",
                                       config.accountId, config.environmentId, check.name.toString(), JSON.stringify(err));
@@ -148,4 +171,19 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
 function isCheckNameValid(checkName) {
     "use strict";
     return (null != checkName.match("^[a-zA-Z0-9]*$"));
+}
+
+function getCheckMode(check) {
+    "use strict";
+    if (check.hasOwnProperty('mode')) {
+        return check.mode;
+    } else {
+        return ['configurationItem',  'snapshotEvent', 'configRule'];
+    }
+}
+
+function isValidMode(checkMode, eventType) {
+    "use strict";
+    if (checkMode === 'all') { return true;}
+    return (checkMode.indexOf(eventType) >= 0);
 }
