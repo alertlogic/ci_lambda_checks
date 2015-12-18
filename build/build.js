@@ -20,6 +20,7 @@ var fs                = require('fs'),
     deploy            = pkg.folders.build + pkg.name + '/',
     deploymentList    = [],
     accountList       = [],
+    callback          = function() {},
     execfile          = require('child_process').execFile;
 
 winston.info('Building Lambda checks to ' + deploy);
@@ -47,34 +48,34 @@ var source = {
  */
 mkdirp(deploy + 'node_modules/', function (err) {
     fs.createReadStream('./package.json').pipe(fs.createWriteStream('./target/ci_lambda_checks/package.json'));
-    execfile('npm', ['install', '--only=production', '--prefix', 'target/ci_lambda_checks'], function(err, stdout) {});
+    execfile('npm', ['install', '--only=production', '--prefix', 'target/ci_lambda_checks'], function(err, stdout) {
+        /*
+         * Execute glob based distribution of source files
+         */
+        for ( var section in source ) {
+            glob.sync(source[section]).forEach(function(item) {
+                mkdirp(path.dirname(item.replace(base, deploy)), function (err) {
+                    if (err) {
+                        return onErr(err);
+                    } else {
+                        switch (this.section) {
+                            case 'application':
+                                var minified = uglifyjs.minify(item, {mangle: false});
+                                fs.writeFile(item.replace(base, deploy), minified.code.replace('release.version', pkg.version));
+                                break;
+                            default:
+                                fs.createReadStream(item).pipe(fs.createWriteStream(item.replace(base, deploy)));
+                                break;
+                        }
+                    }
+                }.bind({section: section}));
+            });
+        }
+    });
     if (err) {
         return onErr(err);
     }
 });
-
-/*
- * Execute glob based distribution of source files
- */
-for ( var section in source ) {
-    glob.sync(source[section]).forEach(function(item) {
-        mkdirp(path.dirname(item.replace(base, deploy)), function (err) {
-            if (err) {
-                return onErr(err);
-            } else {
-                switch (this.section) {
-                    case 'application':
-                        var minified = uglifyjs.minify(item, {mangle: false});
-                        fs.writeFile(item.replace(base, deploy), minified.code.replace('release.version', pkg.version));
-                        break;
-                    default:
-                        fs.createReadStream(item).pipe(fs.createWriteStream(item.replace(base, deploy)));
-                        break;
-                }
-            }
-        }.bind({section: section}));
-    });
-}
 
 /*
  * Let's fix this to actually use the users credentials to promprt the proper selections using CI.
@@ -89,33 +90,6 @@ function onErr(err) {
         winston.error(err);
         return 1;
     }
-}
-
-var updated    = false,
-    properties = [],
-    callback   = function() {},
-    required   = {
-        "api_url": ""
-    };
-
-for ( var requirement in required ) {
-    var value = config[requirement];
-    if (config[requirement] === "") {
-        properties.push({"name": requirement});
-        updated = true;
-    }
-}
-
-// Prompt the user for data or fail
-if (properties.length > 0) {
-    winston.warn("Some required properties have not been set, please provide them below and we will update your config.js file for you.");
-    prompt.start();
-    prompt.get(properties, function (err, result) {
-        if (err) { return onErr(err); }
-        for ( var key in result ) {
-            config[key] = result[key];
-        };
-    });
 }
 
 var ciLogin = [
@@ -209,14 +183,15 @@ prompt.get(ciLogin, function (err, result) {
                 var zipped  = '../' + fileName;
                 fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
                 process.chdir('target/ci_lambda_checks');
-                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {});
-                process.chdir('../../');
-                var deploymentSpec = {
-                    "accountId": config.accountId,
-                    "file": fileName,
-                    "awsAccounts": awsAccounts
-                };
-                setup(deploymentSpec, callback);
+                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {
+                    process.chdir('../../');
+                    var deploymentSpec = {
+                        "accountId": config.accountId,
+                        "file": fileName,
+                        "awsAccounts": awsAccounts
+                    };
+                    setup(deploymentSpec, callback);
+                });
             }
         ],
         function (err) {
