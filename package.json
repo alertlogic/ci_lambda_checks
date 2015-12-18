@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "npm run test && node build/build.js",
-    "hookmeup": "cd utility; ./hookmeup.sh",
+    "hookmeup": "utility/hookmeup.sh",
     "lint": "node node_modules/.bin/jshint --config ./.jshintrc --exclude-path ./.jshintignore ./",
     "test": "npm run lint",
     "release": "npm version patch",
