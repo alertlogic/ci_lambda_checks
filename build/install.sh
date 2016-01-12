@@ -57,6 +57,11 @@ echo -e "${white}Installing NPM dependencies.${NC}"
 cd $OZONE_DIR
 npm install
 
+# Install Jasmine-node as a global module for command line access.
+echo -e "${white}Installing Test dependencies.${NC}"
+cd $OZONE_DIR
+npm install jasmine-node -g
+
 # Execute copying of githooks to all checkouts.
 echo -e "${yellow}Adding GIT pre-push hooks to all projects.${NC}"
 cd $OZONE_DIR
