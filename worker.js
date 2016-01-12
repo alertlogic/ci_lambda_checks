@@ -3,7 +3,8 @@ var async           = require('async'),
     config          = require('./config.js'),
     pkg             = require('./package.json'),
     assets          = require('./utilities/assets.js'),
-    publishResult   = require('./utilities/publish.js');
+    publishResult   = require('./utilities/publish.js'),
+    checksUtils     = require('./utilities/checks.js');
 
 exports.handler = function(args, context) {
     "use strict";
@@ -15,6 +16,7 @@ exports.handler = function(args, context) {
         eventType       = args.eventType,
         resourceType    = "",
         resourceId      = "",
+        tags            = {},
         vpcId           = null,
         inScope         = true;
 
@@ -27,6 +29,7 @@ exports.handler = function(args, context) {
         case 'configurationItem':
             resourceType    = rawMessage.configurationItem.resourceType;
             resourceId      = rawMessage.configurationItem.resourceId;
+            tags            = rawMessage.configurationItem.tags;
             break;
         default:
             winston.error("Worker [%s:%s]: Unsupported message: '%s', Args: '%s'", 
@@ -36,19 +39,17 @@ exports.handler = function(args, context) {
 
     config.accountId       = args.accountId;
     config.environmentId   = args.environmentId;
-    winston.debug("Worker [%s:%s]: Handler called: %s", config.accountId, config.environmentId, JSON.stringify(args));
 
     if (resourceType === "AWS::EC2::VPC") {
         vpcId = resourceId;
-    } else if (eventType === "configurationItem") {
+    } else if (eventType !== "configRule") {
         if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
             // Deleted resources have a different config item layout
             vpcId = rawMessage.configurationItemDiff.changedProperties.Configuration.previousValue.vpcId;
         } else {
             if (rawMessage.configurationItem.hasOwnProperty("configuration") &&
-                rawMessage.configurationItem.configuration.hasOwnProperty("configurationItem") &&
-                rawMessage.configurationItem.configurationItem.hasOwnProperty("vpcId")) {
-                vpcId = rawMessage.configurationItem.configurationItem.vpcId;
+                rawMessage.configurationItem.configuration.hasOwnProperty("vpcId")) {
+                vpcId = rawMessage.configurationItem.configuration.vpcId;
             } else {
                 var relationships   = rawMessage.configurationItem.relationships;
                 for (var i = 0; i < relationships.length; i++) {
@@ -72,34 +73,41 @@ exports.handler = function(args, context) {
     async.each(config.checks, function (check, callback) {
         if (check.enabled === true) {
 
-            if (!isCheckNameValid(check.name.toString())) {
+            if (!checksUtils.validateCheckName(check.name.toString())) {
                 winston.error("Worker [%s:%s]: Invalid check name. Use only alphanumeric values. Check name: '%s'",
                               config.accountId, config.environmentId, check.name.toString());
                 return callback();
             }
 
-            winston.debug("Worker [%s:%s]: Check '%s' is enabled",
+            winston.info("Worker [%s:%s]: Check '%s' is enabled",
                           config.accountId, config.environmentId, check.name.toString());
+
             //
             // Don't do anything if the check isn't applicable to the event's resourceType
             //
-            if (-1 === check.configuration.resourceTypes.indexOf(resourceType)) {
-                winston.info("Worker [%s:%s]: Skipping execution of the check '%s'. Record ResourceType: '%s'. Supported types: '%s'",
-                             config.accountId, config.environmentId, check.name.toString(), resourceType, check.configuration.resourceTypes.toString()); 
+            if (!checksUtils.validateResourceType(check, resourceType)) {
+                winston.info("Worker [%s:%s]: Unsupported resource type for the check '%s'. Record ResourceType: '%s'. Supported types: '%s'",
+                             config.accountId, config.environmentId, check.name.toString(), resourceType, check.configuration.resourceTypes.toString());
                 return callback();
             }
-            
-            var checkMode = getCheckMode(check); 
-            if (!isValidMode(checkMode, eventType)) {
+
+            var checkMode = checksUtils.getCheckMode(check);
+            if (!checksUtils.isValidMode(checkMode, eventType)) {
                 winston.info("Worker [%s:%s]: Skipping execution of the check '%s'. EventType: '%s'. Supported types: '%s'",
                              config.accountId, config.environmentId, check.name.toString(), eventType, checkMode); 
+                return callback();
+            }
+
+            if (checksUtils.getWhitelistHandler(check) === 'worker' && checksUtils.isResourceWhitelisted(check, resourceType, resourceId, tags)) {
+                winston.info("Worker [%s:%s]: Skipping execution of the check '%s'. Resource is whitelisted. ResourceType: '%s', ResourceId: '%s', Tags: '%s'",
+                             config.accountId, config.environmentId, check.name.toString(), resourceType, resourceId, JSON.stringify(tags));
                 return callback();
             }
 
             try {
                 var test = require('./checks/' + check.name.toString() + '.js'),
                     metadata = getMetadata(check.name.toString(), awsRegion, resourceType, resourceId);
-                winston.debug("Worker [%s:%s]: Executing '%s' custom check. ResourceType: '%s', ResourceId: '%s'",
+                winston.info("Worker [%s:%s]: Executing '%s' custom check. ResourceType: '%s', ResourceId: '%s'",
                               config.accountId, config.environmentId, check.name.toString(), resourceType, resourceId);
 
                 test(eventType, inScope, awsRegion, vpcId, rawMessage, function(err, result) {
@@ -166,24 +174,4 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
         scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v" + pkg.version,
         content_type: "application/json"
     };
-}
-
-function isCheckNameValid(checkName) {
-    "use strict";
-    return (null != checkName.match("^[a-zA-Z0-9]*$"));
-}
-
-function getCheckMode(check) {
-    "use strict";
-    if (check.hasOwnProperty('mode')) {
-        return check.mode;
-    } else {
-        return ['configurationItem',  'snapshotEvent', 'configRule'];
-    }
-}
-
-function isValidMode(checkMode, eventType) {
-    "use strict";
-    if (checkMode === 'all') { return true;}
-    return (checkMode.indexOf(eventType) >= 0);
 }

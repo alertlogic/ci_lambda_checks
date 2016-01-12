@@ -4,6 +4,7 @@ var config                  = require('../config.js'),
     alSecurityApplianceName = "AlertLogic Security Appliance",
     alProtectionGroupName   = "Alert Logic Security Protection Group",
     checkName               = "enableVpcScanning",
+    checksUtils             = require('../utilities/checks.js'),
     debug                   = true;
 
 var enableVpcScanning   = function(eventType, inScope, awsRegion, vpcId, rawMessage, callback)  {
@@ -39,8 +40,11 @@ function handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
     }
 
     AWS.config.update({region: awsRegion});
-    var ec2 = new AWS.EC2({apiVersion: '2015-10-01'}),
-        filter = [{name: "Name", values: [alSecurityApplianceName]}];
+    var check   = config.checks[checkName],
+        tags    = rawMessage.configurationItem.hasOwnProperty('tags') ? rawMessage.configurationItem.tags : {},
+        ec2     = new AWS.EC2({apiVersion: '2015-10-01'}),
+        filter  = [{name: "Name", values: [alSecurityApplianceName]}];
+
     getInstances(filter, [], vpcId, ec2, function(err, appliances) {
         if (err) {
             reportStatus("Failed to get Alert Logic Security appliances. Error: " + JSON.stringify(err));
@@ -57,7 +61,8 @@ function handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
             }
         }
 
-        if (inScope) {
+        if (inScope &&
+             !checksUtils.isResourceWhitelisted(check, 'AWS::EC2::VPC', vpcId, tags)) {
             return protectVpc(vpcId, instances, ec2, callback);
         } else {
             return unprotectVpc(vpcId, instances, ec2, callback);
@@ -104,9 +109,17 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
         /*
          * Enable scanning for an instance except Alert Logic Security Appliance
          */
-        var instanceId = rawMessage.configurationItem.resourceId;
+        var instanceId = rawMessage.configurationItem.resourceId,
+            resourceWhitelisted = checksUtils.isResourceWhitelisted(
+                                        config.checks[checkName],
+                                        'AWS::EC2::Instance',
+                                        instanceId,
+                                        rawMessage.configurationItem.tags);
+
         if (!inScope) {return callback(null, false);}
-        if (rawMessage.configurationItemDiff.changeType !== "CREATE") {return callback(null, false);}
+        if (resourceWhitelisted) {
+            return unprotectVpc(vpcId, [instanceId], ec2, callback);
+        }
 
         handleGetInstances = function(err, result) {
             if (err) {
@@ -171,10 +184,25 @@ function protectVpc(vpcId, instances, ec2, resultCallback) {
             authorizeSecurityGroupProtection(
                 config.accountId, config.environmentId, data, alSecurityGroupId, ec2, callback);
         },
-        function(groupId, callback) {
-            reportDebug("Enable protection for instances '" + instances.toString() + "' in '" + vpcId + "' VPC.");
-            updateInstancesProtection(
-                true, instances, alProtectionGroup.GroupId, vpcId, ec2, callback);
+        function (groupId, callback) {
+            applyWhitelisting(instances, vpcId, ec2, callback);
+        },
+        function(result, callback) {
+            var protectInstances = result.include;
+            reportDebug("Enable protection for instances '" + protectInstances.toString() +
+                        "' in '" + vpcId + "' VPC.");
+            updateInstancesProtection(true, protectInstances, alProtectionGroup.GroupId, vpcId, ec2, function (err) {
+                if (err) {return callback(err);}
+                return callback(null, result.exclude);
+            });
+        },
+        function(excludeInstances, callback) {
+            if (!excludeInstances.length) {
+                return callback(null);
+            }
+            reportDebug("Disabling protection for whitlisted instances '" + excludeInstances.toString() +
+                        "' in '" + vpcId + "' VPC.");
+            updateInstancesProtection(false, excludeInstances, alProtectionGroup.GroupId, vpcId, ec2, callback);
         }
     );
     updateProtection(vpcId, function(err, result) {
@@ -607,6 +635,71 @@ function revokeSecurityGroupProtection(alProtectionGroup, vpcId, ec2, resultCall
     ], function(err, alSecurityGroupId) {
         return resultCallback(err, alSecurityGroupId);
     });
+}
+
+/*
+ * Filter out whitelisted instances
+ */
+function applyWhitelisting(instances, vpcId, ec2, resultCallback) {
+    "use strict";
+    if (!instances.length) {
+        return resultCallback(null, instances);
+    }
+
+    var filters = checksUtils.getWhitelistEc2Filter(config.checks[checkName]),
+        whitelistedInstances = [],
+        nextToken   = null;
+    if (!filters.length) {
+        return resultCallback(null, instances);
+    }
+
+    async.eachSeries(filters, function(params, seriesCallback) {
+        async.doWhilst(
+            function(callback) {
+                if (null !== nextToken) {
+                    params['nextToken'] = nextToken;
+                }
+
+                executeAwsApi(ec2.describeInstances.bind(ec2), params, function(err, data) {
+                    if (err) {
+                        return callback(err);
+                    }
+
+                    for (var i = 0; i < data.Reservations.length; i++) {
+                        var reservationInstances = data.Reservations[i].Instances;
+                        for (var l = 0; l < reservationInstances.length; l++) {
+                            var index = instances.indexOf(reservationInstances[l].InstanceId);
+                            if (index >= 0) {
+                                console.log("Whitelisting '%s' instance.", reservationInstances[l].InstanceId);
+                                instances.splice(index, 1);
+                                whitelistedInstances.push(reservationInstances[l].InstanceId);
+                            }
+                        }
+                    }
+                    nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
+                    return callback(null);
+                });
+            },
+            function() {
+                return null !== nextToken;
+            },
+            function (err) {
+                if (err) {
+                    console.log("Failed to process whitelisted appliances. Error: %s", JSON.stringify(err));
+                    return seriesCallback(err);
+                }
+                return seriesCallback(null);
+            }
+        );
+        },
+        function(err) {
+            if (err) {
+                console.log("Failed to process whitelisted appliances. Error: %s", JSON.stringify(err));
+                return resultCallback(err);
+            }
+            return resultCallback(null, {"include": instances, "exclude": whitelistedInstances});
+        }
+    );
 }
 
 /*
