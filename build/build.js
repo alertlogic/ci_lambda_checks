@@ -31,6 +31,7 @@ winston.info('Building Lambda checks to ' + deploy);
 var source = {
     "application": [
         base + '**/*.js',
+        '!' + base + '**/*.spec.js',
         '!' + base + 'build/**',
         '!' + base + 'git-hooks/**',
         '!' + base + 'node_modules/**',
