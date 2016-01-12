@@ -657,7 +657,7 @@ function applyWhitelisting(instances, vpcId, ec2, resultCallback) {
         async.doWhilst(
             function(callback) {
                 if (null !== nextToken) {
-                    params['NextToken'] = nextToken;
+                    params['nextToken'] = nextToken;
                 }
 
                 executeAwsApi(ec2.describeInstances.bind(ec2), params, function(err, data) {
@@ -676,7 +676,7 @@ function applyWhitelisting(instances, vpcId, ec2, resultCallback) {
                             }
                         }
                     }
-                    nextToken = data.hasOwnProperty('NextToken') ? data.NextToken : null;
+                    nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
                     return callback(null);
                 });
             },
