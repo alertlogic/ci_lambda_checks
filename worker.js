@@ -82,6 +82,12 @@ exports.handler = function(args, context) {
             winston.info("Worker [%s:%s]: Check '%s' is enabled",
                           config.accountId, config.environmentId, check.name.toString());
 
+            if (!checksUtils.validateRegion(check, awsRegion)) {
+                winston.info("Worker [%s:%s]: Unsupported region for the check '%s'. Region: '%s'",
+                    config.accountId, config.environmentId, check.name.toString(), awsRegion);
+                return callback();
+            }
+
             //
             // Don't do anything if the check isn't applicable to the event's resourceType
             //
