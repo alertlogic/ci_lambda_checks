@@ -29,6 +29,18 @@ var validateCheckName = function(checkName) {
     return (null != checkName.match("^[a-zA-Z0-9]*$"));
 };
 
+var validateRegion = function(check, awsRegion) {
+    "use strict";
+    if (check.hasOwnProperty('supported')) {
+        return contains(awsRegion, check.supported);
+    }
+
+    if (config.hasOwnProperty('supported')) {
+        return contains(awsRegion, config.supported);
+    }
+    return false;
+};
+
 var getWhitelistHandler = function(check) {
     "use strict";
     if (!check.configuration.hasOwnProperty('whitelist')) {
@@ -163,6 +175,7 @@ module.exports = {
     "isValidMode": isValidMode,
     "getCheckMode": getCheckMode,
     "validateCheckName": validateCheckName,
+    "validateRegion": validateRegion,
     "isResourceWhitelisted": isResourceWhitelisted,
     "getWhitelistEc2Filter": getWhitelistEc2Filter,
     "getWhitelistHandler": getWhitelistHandler
