@@ -231,6 +231,12 @@ var config = {
                     }
                 }
             }
+        },
+        "awsInspector": {
+            "name": "awsInspector",
+            "enabled": true,
+            "mode": ["scheduledEvent"],
+            "supported": ["us-west-2"]
         }
     }
 };

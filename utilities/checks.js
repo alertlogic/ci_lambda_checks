@@ -3,7 +3,10 @@ var winston     = require('winston'),
 
 var validateResourceType = function(check, resourceType) {
     "use strict";
-    if (-1 === check.configuration.resourceTypes.indexOf(resourceType)) {
+
+    if (check.hasOwnProperty('configuration') &&
+            check.configuration.hasOwnProperty('resourceTypes') &&
+            -1 === check.configuration.resourceTypes.indexOf(resourceType)) {
         return false;
     }
     return true;
@@ -43,6 +46,10 @@ var validateRegion = function(check, awsRegion) {
 
 var getWhitelistHandler = function(check) {
     "use strict";
+    if (!check.hasOwnProperty('configuration')) {
+        return null;
+    }
+
     if (!check.configuration.hasOwnProperty('whitelist')) {
         return null;
     }
@@ -58,6 +65,10 @@ var isResourceWhitelisted = function(check, resourceType, resourceId, tags) {
     winston.info("Worker [%s:%s]: isResourceWhitelisted called for check '%s'. ResourceType: '%s', ResourceId: '%s', Tags: '%s'",
                  config.accountId, config.environmentId,
                  check.name.toString(), resourceType, resourceId, JSON.stringify(tags));
+    if (!check.hasOwnProperty('configuration')) {
+        return false;
+    }
+
     if (!(check.configuration.hasOwnProperty('whitelist') && check.configuration.whitelist.hasOwnProperty('data')) ) {
         // whitelist field is missing in configuration.
         return false;

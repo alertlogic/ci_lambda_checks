@@ -10,23 +10,35 @@ var async           = require('async'),
 exports.handler = function(event, context) {
     "use strict";
 
-    var record  = event.Records[0],
-        subject = record.Sns.Subject,
-        message = JSON.parse(event.Records[0].Sns.Message);
-
-    console.log("Received '%s' event", JSON.stringify(record));
-
-    // Handle scheduled event here.
-    if (record.hasOwnProperty('detail-type') && record['detail-type'] === 'Scheduled Event') {
-        return handleScheduledEvent(record,  function(err, result) {
-            handleCompletionCallback(err, record, context);
+    var data = {};
+    if (event.hasOwnProperty('detail-type') && event['detail-type'] === 'Scheduled Event') {
+        /*
+        return handleScheduledEvent(event,  function(err, result) {
+            handleCompletionCallback(err, event, context);
         });
+        */
+        data['record'] = {};
+        data['awsAccountId'] = event.account;
+        data['awsRegion'] = event.region;
+        data['message'] = event;
+
+    } else {
+        var record  = event.Records[0],
+            message = JSON.parse(event.Records[0].Sns.Message),
+            subject = record.Sns.Subject;
+
+        if (!isSupportedEvent(message)) {
+            console.log("'" + subject + "' is not supported");
+            return context.succeed();
+        }
+
+        data['record'] = record;
+        data['message'] = message;
+        data['awsAccountId'] = getAccountIdFromSubject(subject);
+        data['awsRegion'] = getAwsRegionFromSubject(subject);
     }
 
-    if (!isSupportedEvent(message)) {
-        console.log("'" + subject + "' is not supported"); 
-        return context.succeed();
-    }
+    var supportedAssetTypesHashtable = getSupportedAssetTypes(config.checks);
 
     getToken(function(status, token) {
         if (status !== "SUCCESS") {
@@ -35,9 +47,6 @@ exports.handler = function(event, context) {
         }
         
         // get a list of all environments for this AWS account
-        var awsAccountId    = getAccountIdFromSubject(subject),
-            awsRegion       = getAwsRegionFromSubject(subject),
-            supportedAssetTypesHashtable = getSupportedAssetTypes(config.checks);
 
         async.waterfall(
             [
@@ -53,8 +62,9 @@ exports.handler = function(event, context) {
                     });
                 },
                 function processMyAccountSources(rows, callback) {
-                    console.log("Getting environments for '" + awsAccountId + "'. Number of active environments: '" + rows.length + "'.");
-                    var deletedEnvironmentId = getDeletedAlertLogicAppliance(config.accountId, message);
+                    console.log("Getting environments for '" + data.awsAccountId +
+                                 "'. Number of active environments: '" + rows.length + "'.");
+                    var deletedEnvironmentId = getDeletedAlertLogicAppliance(config.accountId, data.message);
                     if (deletedEnvironmentId) {
                         // This is a delete instance event for Alert Logic's security appliance for our account.
                         var params          = {
@@ -62,14 +72,14 @@ exports.handler = function(event, context) {
                             "accountId":        config.accountId,
                             "environmentId":    deletedEnvironmentId,
                             "record":           record,
-                            "awsRegion":        awsRegion,
-                            "eventType":        getEventType(message),
+                            "awsRegion":        data.awsRegion,
+                            "eventType":        getEventType(data.message),
                             "assetTypes":       supportedAssetTypesHashtable
                         };
 
                         return processAwsConfigEvent(
                                     params,
-                                    message,
+                                    data.message,
                                     function(err, result) {
                                         handleCompletionCallback(err, record, context);
                                     });
@@ -80,7 +90,7 @@ exports.handler = function(event, context) {
                         var source = row.source;
                         sources.getCredential(token, source.config.aws.credential.id,function(status, credential) {
                             var sourcesAwsAccountId = credential.credential.iam_role.arn.split(":")[4];
-                            if (sourcesAwsAccountId !== awsAccountId) {
+                            if (sourcesAwsAccountId !== data.awsAccountId) {
                                 // Don't do anything for aws accounts other then the current one
                                 return sourcesAsyncCallback(null);
                             }
@@ -90,14 +100,14 @@ exports.handler = function(event, context) {
                                     "accountId":        config.accountId,
                                     "environmentId":    source.id,
                                     "record":           record,
-                                    "awsRegion":        awsRegion,
-                                    "eventType":        getEventType(message),
+                                    "awsRegion":        data.awsRegion,
+                                    "eventType":        getEventType(data.message),
                                     "assetTypes":       supportedAssetTypesHashtable
                                 };
 
                             return processAwsConfigEvent(
                                         params,
-                                        message,
+                                        data.message,
                                         sourcesAsyncCallback);
                             });
                         },
@@ -184,6 +194,17 @@ function processAwsConfigEvent(params, message, callback) {
                     params.vpcs = vpcs;
                     return processSnapshot(params, message, callback);
                 });
+
+            case 'scheduledEvent':
+                return analyze(params, function(status, vpcs) { 
+                    if (status !== "SUCCESS") {
+                        return callback(status);
+                    }
+                    params.message  = message;
+                    params.vpcs = vpcs;
+                    return callWorker(params,  callback);
+                });
+
             default: 
                 console.log("Attempted to process unsupported record. Event: " + JSON.stringify(params.record));
                 return callback(null);
@@ -294,9 +315,8 @@ function callWorker(args, callback) {
             "Payload": payload
         };
 
-    console.log("Calling '%s' function for '%s' environment. ResourceType: '%s', ResourceId: '%s'.",
-                params.FunctionName, args.environmentId,
-                args.message.configurationItem.resourceType, args.message.configurationItem.resourceId);
+    console.log("Calling '%s' function for '%s' environment. EventType: '%s'",
+                params.FunctionName, args.environmentId, args.eventType);
     lambda.invoke(params, function(err, data) {
         if (err) {
             console.error("Failed to invoke lambda function for '" + args.environmentId +
@@ -329,37 +349,10 @@ function analyze(params, callback) {
     });
 }
 
-function handleScheduledEvent(record, callback) {
-    "use strict";
-     
-    AWS.config.update({region: record.region});
-    var awsConfig       = new AWS.ConfigService();
-    
-    /*
-     * Schedule configuration snapshot delivery.
-     */
-    awsConfig.deliverConfigSnapshot({deliveryChannelName: "default"}, function(err, data) {
-        if (err) {
-            switch (err.code) {
-                case "ThrottlingException":
-                    console.log("Delivery of a configuration snapshot was already scheduled.");
-                    return callback(null);
-                default:
-                    console.error("Failed to schedule delivery of a configuration snapshot. Error: " + JSON.stringify(err));
-                    return callback(err);
-            }
-        } else {
-            console.log("Successfully scheduled delivery of a configuration snapshot. configSnapshotId: " + data.configSnapshotId);
-            return callback(null, data);
-        }
-    });
-
-}
-
-function handleCompletionCallback(err, record, context) {
+function handleCompletionCallback(err, data, context) {
     "use strict";
     if (err) {
-        console.error("Failed to process AWS Config Event: " + JSON.stringify(record, null, 2) +
+        console.error("Failed to process AWS Config Event: " + JSON.stringify(data, null, 2) +
                       ". Error: " + JSON.stringify(err));
         context.fail();
     } else {
@@ -370,7 +363,9 @@ function handleCompletionCallback(err, record, context) {
 
 function isSupportedEvent(message) {
     "use strict";
-    if (message.hasOwnProperty('configurationItem') || (message.hasOwnProperty('messageType') && message.messageType === 'ConfigurationSnapshotDeliveryCompleted')) {
+    if (message.hasOwnProperty('configurationItem') ||
+            (message.hasOwnProperty('messageType') &&
+            message.messageType === 'ConfigurationSnapshotDeliveryCompleted')) {
         return true;
     } else {
         return false;
@@ -442,6 +437,10 @@ function getEventType(message) {
 
     if (message.hasOwnProperty('configRuleName')) { 
         return 'configRule';
+    }
+
+    if (message.hasOwnProperty('detail-type') && message['detail-type'] === 'Scheduled Event') {
+        return 'scheduledEvent';
     }
 
     return null;

@@ -25,12 +25,17 @@ exports.handler = function(args, context) {
             resourceType    = rawMessage.resourceType;
             resourceId      = rawMessage.resourceId;
             break;
+
         case 'snapshotEvent':
         case 'configurationItem':
             resourceType    = rawMessage.configurationItem.resourceType;
             resourceId      = rawMessage.configurationItem.resourceId;
             tags            = rawMessage.configurationItem.tags;
             break;
+
+        case 'scheduledEvent':
+            break;
+
         default:
             winston.error("Worker [%s:%s]: Unsupported message: '%s', Args: '%s'", 
                           config.accountId, config.environmentId, JSON.stringify(rawMessage), JSON.stringify(args));
@@ -39,37 +44,15 @@ exports.handler = function(args, context) {
 
     config.accountId       = args.accountId;
     config.environmentId   = args.environmentId;
+    vpcId = getVpcId(eventType, resourceType, resourceId, rawMessage);
 
-    if (resourceType === "AWS::EC2::VPC") {
-        vpcId = resourceId;
-    } else if (eventType !== "configRule") {
-        if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
-            // Deleted resources have a different config item layout
-            vpcId = rawMessage.configurationItemDiff.changedProperties.Configuration.previousValue.vpcId;
-        } else {
-            if (rawMessage.configurationItem.hasOwnProperty("configuration") &&
-                rawMessage.configurationItem.configuration.hasOwnProperty("vpcId")) {
-                vpcId = rawMessage.configurationItem.configuration.vpcId;
-            } else {
-                var relationships   = rawMessage.configurationItem.relationships;
-                for (var i = 0; i < relationships.length; i++) {
-                    if (relationships[i].resourceType === "AWS::EC2::VPC" &&
-                        relationships[i].name === "Is contained in Vpc") {
-                        vpcId = relationships[i].resourceId;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-        
     // Tell checks if the vpc in scope.
     if (vpcId && vpcs.indexOf(vpcId) === -1) {
         inScope = false;
     }
 
-    winston.info("Worker [%s:%s]: Resource inScope: '%s'. ResourceType: '%s'. ResourceId: '%s', VPC: '%s'. VPCs in scope: '%s'.",
-                  config.accountId, config.environmentId, inScope, resourceType, resourceId, vpcId, vpcs.toString());
+    winston.info("Worker [%s:%s]: EventType: '%s', Resource inScope: '%s'. ResourceType: '%s'. ResourceId: '%s', VPC: '%s'. VPCs in scope: '%s'.",
+                  config.accountId, config.environmentId, eventType, inScope, resourceType, resourceId, vpcId, vpcs.toString());
     async.each(config.checks, function (check, callback) {
         if (check.enabled === true) {
 
@@ -89,18 +72,19 @@ exports.handler = function(args, context) {
             }
 
             //
-            // Don't do anything if the check isn't applicable to the event's resourceType
+            // Don't do anything if the check isn't applicable to the event's type or resourceType
             //
-            if (!checksUtils.validateResourceType(check, resourceType)) {
-                winston.info("Worker [%s:%s]: Unsupported resource type for the check '%s'. Record ResourceType: '%s'. Supported types: '%s'",
-                             config.accountId, config.environmentId, check.name.toString(), resourceType, check.configuration.resourceTypes.toString());
-                return callback();
-            }
 
             var checkMode = checksUtils.getCheckMode(check);
             if (!checksUtils.isValidMode(checkMode, eventType)) {
                 winston.info("Worker [%s:%s]: Skipping execution of the check '%s'. EventType: '%s'. Supported types: '%s'",
                              config.accountId, config.environmentId, check.name.toString(), eventType, checkMode); 
+                return callback();
+            }
+
+            if (!checksUtils.validateResourceType(check, resourceType)) {
+                winston.info("Worker [%s:%s]: Unsupported resource type for the check '%s'. Record ResourceType: '%s'. Supported types: '%s'",
+                             config.accountId, config.environmentId, check.name.toString(), resourceType, check.configuration.resourceTypes.toString());
                 return callback();
             }
 
@@ -127,7 +111,19 @@ exports.handler = function(args, context) {
                                     check.name.toString(), JSON.stringify(result),
                                     typeof result);
                         if (typeof result === 'object' && result.vulnerable === true) {
-                            if (result.hasOwnProperty('vulnerabilities')) {
+                            if (result.hasOwnProperty('data')) {
+                                async.each(Object.getOwnPropertyNames(result.data), function(assetName, cb) {
+                                    console.log('Processing %s asset. ResourceType: %s', assetName, result.data[assetName].resourceType);
+                                    var metadata = getMetadata(
+                                        check.name.toString(),
+                                        awsRegion,
+                                        result.data[assetName].resourceType,
+                                        assetName);
+                                    publishResult(token, metadata, result.data[assetName].vulnerabilities, cb);
+                                }, function(err) {
+                                    callback(null);
+                                });
+                            } else if (result.hasOwnProperty('vulnerabilities')) {
                                 publishResult(token, metadata, result.vulnerabilities, callback);
                             } else if (result.hasOwnProperty('evidence')) {
                                 var vulnerability = check.vulnerability;
@@ -162,8 +158,8 @@ exports.handler = function(args, context) {
                           config.accountId, config.environmentId, JSON.stringify(args), JSON.stringify(err));
             return context.fail();
         } else { 
-            winston.info("Worker [%s:%s]: Successfully handled driver message. Subject: '%s'.",
-                         config.accountId, config.environmentId, args.record.Sns.Subject);
+            winston.info("Worker [%s:%s]: Successfully handled driver message.",
+                         config.accountId, config.environmentId);
             return context.succeed();
         }
     });
@@ -180,4 +176,44 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
         scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v" + pkg.version,
         content_type: "application/json"
     };
+}
+
+function getVpcId(eventType, resourceType, resourceId, rawMessage) {
+    "use strict";
+    var vpcId = null;
+    switch (eventType) {
+        case 'scheduledEvent':
+            break;
+        case 'configRule':
+            if (!rawMessage.hasOwnProperty('configurationItem')) {
+                break;
+            }
+            if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
+                // Deleted resources have a different config item layout
+                vpcId = rawMessage.configurationItemDiff.changedProperties.Configuration.previousValue.vpcId;
+            } else {
+                if (rawMessage.configurationItem.hasOwnProperty("configuration") &&
+                        rawMessage.configurationItem.configuration.hasOwnProperty("vpcId")) {
+                    vpcId = rawMessage.configurationItem.configuration.vpcId;
+                } else {
+                    if (rawMessage.configurationItem.hasOwnProperty('relationships')) {
+                        var relationships   = rawMessage.configurationItem.relationships;
+                        for (var i = 0; i < relationships.length; i++) {
+                            if (relationships[i].resourceType === "AWS::EC2::VPC" &&
+                                relationships[i].name === "Is contained in Vpc") {
+                                vpcId = relationships[i].resourceId;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        default:
+            if (resourceType === "AWS::EC2::VPC") {
+                vpcId = resourceId;
+            }
+            break;
+    }
+    return vpcId;
 }
