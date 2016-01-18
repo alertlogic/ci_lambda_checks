@@ -12,11 +12,6 @@ exports.handler = function(event, context) {
 
     var data = {};
     if (event.hasOwnProperty('detail-type') && event['detail-type'] === 'Scheduled Event') {
-        /*
-        return handleScheduledEvent(event,  function(err, result) {
-            handleCompletionCallback(err, event, context);
-        });
-        */
         data['record'] = {};
         data['awsAccountId'] = event.account;
         data['awsRegion'] = event.region;
