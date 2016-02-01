@@ -50,6 +50,7 @@ The new check configuration must have:
 "sg": {
     "name": "sg",
     "enabled": true,
+    "mode": ["configurationItem", "snapshotEvent"],
     "configuration": {
         "resourceTypes": [
             "AWS::EC2::SecurityGroup"
@@ -75,13 +76,13 @@ The new check configuration must have:
         evidence: "{sg_configuration,0}",
         type : "application/json"
     }
-}
+},
 ```  
 This allows the index.handler to iterate through and execute any checks marked as ```"enabled": true``` to build a custom check library based on your deployment strategy.  
 
 ##Building for AWS    
-run ```npm run build``` to create a versioned, distributable zip artifact.  
-This artifcat is properly packaged to upload directly to AWS Lambda and work with the default configuration.  
+run ```npm run build``` to create a versioned, distributable zip artifact with optional (but encouraged) automatic deployment.  
+This artifact is properly packaged to upload directly to AWS Lambda and work with the default configuration.  
 run ```npm run release``` to update the version  
 
 Upload that zip to Lambda  
