@@ -12,35 +12,36 @@ You must enable AWS Config to gain the benefits of the Lambda Framework checks f
 ###Mac OS X  Installation Requirements
 *~ You must have installed XCode and accepted the licensing agreemment before continuing with this document ~*  
 
-Install [Homebrew](http://brew.sh/)  
+Install [Homebrew](http://brew.sh/), which allows us to easily install and manage packages with dependencies.  
 ```$ ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"```  
-*~ Homebrew allows us to easily install and manage packages with dependencies ~*  
 
 Use [Homebrew](http://brew.sh/) to install [Node](http://nodejs.org/)  
 ```$ brew install node```  
-*~ Javascript runtime required to run Lambda cli tools ~*  
 
-###Linux Installation Requirements
+**Note:** To run Lambda cli tools, you must install Javascript runtime.  
 
-Install [Node](http://nodejs.org/) latest Distribution from [Distributions](https://nodejs.org/dist/v4.1.1/)  
-*~ Javascript runtime required to run Lambda cli tools ~*  
+###Linux Installation Requirements  
 
-###Creating Your Environment
+Install the latest distribution of [Node](http://nodejs.org/) from [Distributions](https://nodejs.org/dist/v4.1.1/)  
 
-Clone this repository to somewhere under your home directory.  (we recommend ~/workspace)  
+**Note:** To run Lambda cli tools, you must install Javascript runtime.  
+
+###Create Your Environment
+
+1. To create your environment, clone this repository somewhere within your home directory. We recommend ~/workspace.   
 ```$ git clone git@github.com:alertlogic/ci_lambda_checks.git ci_lambda_checks```  
 ```$ cd ci_lambda_checks```  
 
-Execute the Lambda development environment installation script.  
+2. Execute the Lambda development environment installation script.  
 ```$ build/install.sh```  
 
-###Working in your environment   
+###Work in your environment   
 
-The [NPM](https://www.npmjs.org/) install process that was run earlier installed some [Node](http://nodejs.org/) modules that make the Lambda framework much more helpful than simple code checkouts.  Starting up the framework will enable real time linting, as well as the artifact build system.
+The [NPM](https://www.npmjs.org/) install process that you ran earlier installed some [Node](http://nodejs.org/) modules that make the Lambda framework much more helpful than simple code checkouts.  Starting the framework will enable real-time linting, as well as the artifact build system.
 
-###Creating New Checks  
-Edit ./config.js "checks" key and add the name of your file in the ./checks folder.  
-The new check configuration must have:  
+###Create New Checks  
+Edit the ./config.js "checks" key and add the name of your file in the ./checks folder.  
+The new check configuration must include the following:  
 - a "name" key with the name of the check  
 - an "enabled" key with true or false, and may have any additional configuration you require  
 - a "configuration" key with at least the "resourceTypes" your check supports  
@@ -78,14 +79,18 @@ The new check configuration must have:
     }
 },
 ```  
-This allows the index.handler to iterate through and execute any checks marked as ```"enabled": true``` to build a custom check library based on your deployment strategy.  
+This check configuration allows the index.handler to iterate through and execute any checks marked as ```"enabled": true``` to build a custom check library based on your deployment strategy.  
 
-##Building for AWS    
-run ```npm run build``` to create a versioned, distributable zip artifact with optional (but encouraged) automatic deployment.  
+##Create a build for AWS  
+To create a build for AWS:    
+1. Run ```npm run build``` to create a versioned, distributable zipped artifacts with optional (but encouraged) automatic deployment.  
 This artifact is properly packaged to upload directly to AWS Lambda and work with the default configuration.  
-run ```npm run release``` to update the version  
 
-Upload that zip to Lambda  
+2. (Optional) If you wish to update the version numbers.  
+Run ```npm run release``` to update the version  
+
+3. (Optional) If you have no chosen automatic deployment.
+Upload the resulting zipped artifacts to Lambda  
 
 ###Test Security Group Event
 ```
