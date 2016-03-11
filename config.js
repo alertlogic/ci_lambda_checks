@@ -7,7 +7,7 @@ var config = {
      * US: api.cloudinsight.alertlogic.com
      * UK: api.cloudinsight.alertlogic.co.uk
      */
-    "api_url": "api.cloudinsight.alertlogic.com",
+    "api_url": "api.product.dev.alertlogic.com",
 
     /*
      * Supported Regions for AWS Lambda
@@ -132,43 +132,6 @@ var config = {
             "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::VPC", "AWS::EC2::Instance"]
-                /* 
-                    type: is any of the types specified in the resourceTypes field. 
-                    id: list of Resource ID
-                    tags: list of resource tag.
-                    NOTE: ids or tags are required. ids takes precedence.
-                    Matching any of the whitelisted tags or ids will force the check not to be applied.
-
-                    Below is an example of the whitelisting filter:
-                "whitelist": {
-                    "handler": "check", // Omit handler if you don't require special handling. If you want to handle whitelisting yourself, specify the value 'check'.
-                    "data": [
-                        {
-                            "resourceTypes": ["AWS::EC2::VPC"],
-                            "tags": [
-                                {
-                                    "name": "Name",
-                                    "value": "testvpc"
-                                }
-                            ]
-                        },
-                        {
-                            "resourceTypes": ["AWS::EC2::Instance"],
-                            "ids": 'i-e7526133',
-                            "tags": [
-                                {
-                                    "name": "Test",
-                                    "value": ["*"]
-                                },
-                                {
-                                    "name": "Name",
-                                    "value": ["*SQL*"]
-                                }
-                            ]
-                        },
-                    ]
-                }
-                */
             }
         },
         "awsConfigRules": {
@@ -234,7 +197,7 @@ var config = {
         },
         "awsInspector": {
             "name": "awsInspector",
-            "enabled": true,
+            "enabled": false,
             "mode": ["scheduledEvent"],
             "supported": ["us-west-2"]
         }

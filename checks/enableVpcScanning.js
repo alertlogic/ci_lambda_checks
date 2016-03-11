@@ -4,24 +4,28 @@ var config                  = require('../config.js'),
     alSecurityApplianceName = "AlertLogic Security Appliance",
     alProtectionGroupName   = "Alert Logic Security Protection Group",
     checkName               = "enableVpcScanning",
-    checksUtils             = require('../utilities/checks.js'),
     debug                   = true;
 
-var enableVpcScanning   = function(eventType, inScope, awsRegion, vpcId, rawMessage, callback)  {
+var enableVpcScanning   = function(params, callback) {
     "use strict";
-    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
-        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered" ||
-        rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
+    reportStatus("enableVpcScanning called");
+    if (!validateParamaters(params)) {
+        reportError("enableVpcScanning input parameters invalid. Params: " + JSON.stringify(params));
+        return callback(null, false);
+    }
+    if (params.message.configurationItem.configurationItemStatus === "OK" ||
+        params.message.configurationItem.configurationItemStatus === "ResourceDiscovered" ||
+        params.message.configurationItem.configurationItemStatus === "ResourceDeleted") {
         
-        switch (rawMessage.configurationItem.resourceType) {
+        switch (params.message.configurationItem.resourceType) {
             case "AWS::EC2::VPC":
-                if (eventType !== 'snapshotEvent') {break;}
-                return handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback);
+                if (params.eventType !== 'snapshotEvent') {break;}
+                return handleVpcEvent(params.inScope, params.awsRegion, params.vpcId, params.message, params.whitelist, callback);
             case "AWS::EC2::Instance":
-                if (eventType !== 'configurationItem') {break;}
-                return handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback);
+                if (params.eventType !== 'configurationItem') {break;}
+                return handleInstanceEvent(params.inScope, params.awsRegion, params.vpcId, params.message, params.whitelist, callback);
             default:
-                reportError("Recieved event for unsupported '" + rawMessage.configurationItem.resourceType + "' resource type.");
+                reportError("Recieved event for unsupported '" + params.message.configurationItem.resourceType + "' resource type.");
                 break;
         }
     }
@@ -31,18 +35,17 @@ var enableVpcScanning   = function(eventType, inScope, awsRegion, vpcId, rawMess
 /*
  * VPC Configuration Events handler
  */
-function handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
+function handleVpcEvent(inScope, awsRegion, vpcId, message, whitelist, callback) {
     "use strict";
-    if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
+    reportStatus("handleVpcEvent called. awsRegion: '" + awsRegion + "', vpcId: '" + vpcId + "'.");
+    if (message.configurationItem.configurationItemStatus === "ResourceDeleted") {
         // Ignore resource deletion events
         reportDebug("Not processing ResourceDeleted for AWS::EC2::VPC resource type.");
         return callback(null, false);
     }
 
     AWS.config.update({region: awsRegion});
-    var check   = config.checks[checkName],
-        tags    = rawMessage.configurationItem.hasOwnProperty('tags') ? rawMessage.configurationItem.tags : {},
-        ec2     = new AWS.EC2({apiVersion: '2015-10-01'}),
+    var ec2     = new AWS.EC2({apiVersion: '2015-10-01'}),
         filter  = [{name: "Name", values: [alSecurityApplianceName]}];
 
     getInstances(filter, [], vpcId, ec2, function(err, appliances) {
@@ -51,7 +54,7 @@ function handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
             return callback(null, false);
         }
         
-        var relationships = rawMessage.configurationItem.relationships,
+        var relationships = message.configurationItem.relationships,
             instances = [];
         for(var i = 0; i < relationships.length; i++) { 
             var asset = relationships[i];
@@ -61,9 +64,8 @@ function handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
             }
         }
 
-        if (inScope &&
-             !checksUtils.isResourceWhitelisted(check, 'AWS::EC2::VPC', vpcId, tags)) {
-            return protectVpc(vpcId, instances, ec2, callback);
+        if (inScope) {
+            return protectVpc(vpcId, instances, whitelist, ec2, callback);
         } else {
             return unprotectVpc(vpcId, instances, ec2, callback);
         }
@@ -73,8 +75,9 @@ function handleVpcEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
 /*
  * Instance Configuration Events handler
  */
-function handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
+function handleInstanceEvent(inScope, awsRegion, vpcId, message, whitelist, callback) {
     "use strict";
+    reportStatus("handleInstanceEvent called. awsRegion: '" + awsRegion + "', vpcId: '" + vpcId + "'.");
     AWS.config.update({region: awsRegion});
     var ec2     = new AWS.EC2({apiVersion: '2015-10-01'}),
         tags    = [],
@@ -82,11 +85,11 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
         i       = 0,
         res     = false;
 
-    if (rawMessage.configurationItem.configurationItemStatus === "ResourceDeleted") {
+    if (message.configurationItem.configurationItemStatus === "ResourceDeleted") {
         /*
          * Unprotect VPC when our environment's appliance is deleted in a VPC that isn't in scope.
          */
-        var configration    = rawMessage.configurationItemDiff.changedProperties.Configuration.previousValue;
+        var configration    = message.configurationItemDiff.changedProperties.Configuration.previousValue;
         handleGetInstances = function(err, result) {
             if (err) {
                 reportError("Failed to get '" + vpcId + "' VPC instances. Error: " + JSON.stringify(err));
@@ -109,15 +112,9 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
         /*
          * Enable scanning for an instance except Alert Logic Security Appliance
          */
-        var instanceId = rawMessage.configurationItem.resourceId,
-            resourceWhitelisted = checksUtils.isResourceWhitelisted(
-                                        config.checks[checkName],
-                                        'AWS::EC2::Instance',
-                                        instanceId,
-                                        rawMessage.configurationItem.tags);
-
+        var instanceId = message.configurationItem.resourceId;
         if (!inScope) {return callback(null, false);}
-        if (resourceWhitelisted) {
+        if (matchResourceTags(message.configurationItem.tags, whitelist)) {
             return unprotectVpc(vpcId, [instanceId], ec2, callback);
         }
 
@@ -131,8 +128,8 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
             }
         };
 
-        if (rawMessage.configurationItem.tags.hasOwnProperty("AlertLogic-EnvironmentID")) {
-            if (rawMessage.configurationItem.tags["AlertLogic-EnvironmentID"] !== config.environmentId) {
+        if (message.configurationItem.tags.hasOwnProperty("AlertLogic-EnvironmentID")) {
+            if (message.configurationItem.tags["AlertLogic-EnvironmentID"] !== config.environmentId) {
                 // Dont't protect our own appliances that belong to a different environment.
                 return callback(null, false);
             }
@@ -145,7 +142,7 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, rawMessage, callback) {
     }
 }
    
-function protectVpc(vpcId, instances, ec2, resultCallback) {
+function protectVpc(vpcId, instances, whitelist, ec2, resultCallback) {
     "use strict";
     var alSecurityGroupId   = null,
         alProtectionGroup = null;
@@ -185,7 +182,7 @@ function protectVpc(vpcId, instances, ec2, resultCallback) {
                 config.accountId, config.environmentId, data, alSecurityGroupId, ec2, callback);
         },
         function (groupId, callback) {
-            applyWhitelisting(instances, vpcId, ec2, callback);
+            applyWhitelisting(vpcId, instances, whitelist, ec2, callback);
         },
         function(result, callback) {
             var protectInstances = result.include;
@@ -206,7 +203,11 @@ function protectVpc(vpcId, instances, ec2, resultCallback) {
         }
     );
     updateProtection(vpcId, function(err, result) {
-        return err ? resultCallback(err, false) : resultCallback(null, false);
+        if (err) {
+            reportError("Failed to update '" + vpcId + "' VPC protection. Error: '" + JSON.stringify(err) + "'.");
+            return resultCallback(err, false);
+        }
+        return resultCallback(null, false);
     });
 }
 
@@ -640,19 +641,20 @@ function revokeSecurityGroupProtection(alProtectionGroup, vpcId, ec2, resultCall
 /*
  * Filter out whitelisted instances
  */
-function applyWhitelisting(instances, vpcId, ec2, resultCallback) {
+function applyWhitelisting(vpcId, instances, whitelist, ec2, resultCallback) {
     "use strict";
     if (!instances.length) {
         return resultCallback(null, instances);
     }
 
-    var filters = checksUtils.getWhitelistEc2Filter(config.checks[checkName]),
+    var filters     = getWhitelistEc2Filter(whitelist),
         whitelistedInstances = [],
         nextToken   = null;
     if (!filters.length) {
-        return resultCallback(null, instances);
+        return resultCallback(null, {"include": instances, "exclude": []});
     }
 
+    reportStatus("Applying whitelist filter '" + JSON.stringify(filters) + "'.");
     async.eachSeries(filters, function(params, seriesCallback) {
         async.doWhilst(
             function(callback) {
@@ -832,6 +834,40 @@ function hasTags(compareTags, tags) {
         }
     }
     return false;
+}
+
+function matchResourceTags(tags, whitelist) {
+    "use strict";
+    for (var i = 0; i < whitelist.length; i++) {
+        if (whitelist[i].type === 'tag' && tags.hasOwnProperty(whitelist[i].tag_key) && null !== tags[whitelist[i].tag_key].match(whitelist[i].tag_value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function getWhitelistEc2Filter(whitelist) {
+    "use strict";
+    var filter    = [];
+    for (var i = 0; i < whitelist.length; i++) {
+        if (whitelist[i].type === 'tag') {
+            filter.push({"Filters": [{"Name": "tag:" + whitelist[i].tag_key, "Values": [whitelist[i].tag_value]}]});
+       }
+    }
+    reportStatus("EC2 Whitelist filter: " + JSON.stringify(filter));
+    return filter;
+}
+
+
+function validateParamaters(params) {
+    "use strict";
+    return  params.hasOwnProperty('inScope') &&
+            params.hasOwnProperty('awsRegion') &&
+            params.hasOwnProperty('vpcId') &&
+            params.hasOwnProperty('message') &&
+            params.message.hasOwnProperty('configurationItem') &&
+            params.message.configurationItem.hasOwnProperty('configurationItemStatus') &&
+            params.hasOwnProperty('whitelist');
 }
 
 function reportDebug(msg) {

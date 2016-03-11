@@ -5,7 +5,8 @@ var async           = require('async'),
     config          = require('./config.js'),
     getToken        = require('./utilities/token.js'),
     sources         = require('./utilities/sources.js'),
-    assets          = require('./utilities/assets.js');
+    assets          = require('./utilities/assets.js'),
+    whitelistApi    = require('./utilities/whitelist.js');
 
 exports.handler = function(event, context) {
     "use strict";
@@ -140,7 +141,7 @@ function processAwsConfigEvent(params, message, callback) {
         }
 
         switch (params.eventType) {
-            case 'configurationItem': 
+            case 'configurationItem':
                 if (!params.assetTypes.hasOwnProperty(message.configurationItem.resourceType)) {
                     console.log("'" + message.configurationItem.resourceType + "' resource type is unsupported.");
                     return callback(null);
@@ -149,14 +150,13 @@ function processAwsConfigEvent(params, message, callback) {
                 /*
                 * Process single configuration item
                 */
-                return analyze(params, function(status, vpcs) { 
+                return analyze(params, function(status, result) {
                     if (status !== "SUCCESS") {
-                        console.error("Failed to get protected VPCs for '%s' environment in '%s' region. Error: %s",
-                                    params.environmentId, params.awsRegion, JSON.stringify(status)); 
                         return callback(status);
                     }
-                    params.message  = message;
-                    params.vpcs     = vpcs;
+                    params['message']  = message;
+                    params['vpcs']      = result.vpcs;
+                    params['whitelist'] = result.whitelist;
                     return callWorker(params, callback);
                 });
             case 'configRule':
@@ -167,14 +167,13 @@ function processAwsConfigEvent(params, message, callback) {
                 /*
                 * Process single configuration item
                 */
-                return analyze(params, function(status, vpcs) { 
+                return analyze(params, function(status, result) {
                     if (status !== "SUCCESS") {
-                        console.error("Failed to get protected VPCs for '%s' environment in '%s' region. Error: %s",
-                                    params.environmentId, params.awsRegion, JSON.stringify(status)); 
                         return callback(status);
                     }
-                    params.message  = message;
-                    params.vpcs     = vpcs;
+                    params['message']  = message;
+                    params['vpcs']      = result.vpcs;
+                    params['whitelist'] = result.whitelist;
                     return callWorker(params, callback);
                 });
                
@@ -182,21 +181,23 @@ function processAwsConfigEvent(params, message, callback) {
                 /*
                 * Process all configration items in stored in S3 object
                 */
-                return analyze(params, function(status, vpcs) { 
+                return analyze(params, function(status, result) {
                     if (status !== "SUCCESS") {
                         return callback(status);
                     }
-                    params.vpcs = vpcs;
+                    params['vpcs']      = result.vpcs;
+                    params['whitelist'] = result.whitelist;
                     return processSnapshot(params, message, callback);
                 });
 
             case 'scheduledEvent':
-                return analyze(params, function(status, vpcs) { 
+                return analyze(params, function(status, result) {
                     if (status !== "SUCCESS") {
                         return callback(status);
                     }
-                    params.message  = message;
-                    params.vpcs = vpcs;
+                    params['message']  = message;
+                    params['vpcs']      = result.vpcs;
+                    params['whitelist'] = result.whitelist;
                     return callWorker(params,  callback);
                 });
 
@@ -327,20 +328,45 @@ function callWorker(args, callback) {
 }
 
 /*
- * Get VPCs in scope for the specified environment and call process function
+ * Get VPCs in scope and whitelist for the specified environment
  */
-function analyze(params, callback) {
+function analyze(params, resultCallback) {
     "use strict";
-    assets.getVpcsInScope(params.token, params.environmentId, params.awsRegion, function(status, vpcs) {
-        if (status === 'SUCCESS') {
-            var result = [];
-            if (vpcs.hasOwnProperty('rows') && vpcs.rows > 0) {
-                result = vpcs.assets.map(function(vpc) {return vpc[0].vpc_id;});
-            }
-            callback(status, result);
-        } else {
-            callback(status);
+    async.waterfall([
+        function(callback) {
+            assets.getVpcsInScope(params.token, params.environmentId, params.awsRegion, function(status, vpcs) {
+                var result = {};
+                if (status === 'SUCCESS') {
+                    result['vpcs'] = [];
+                    if (vpcs.hasOwnProperty('rows') && vpcs.rows > 0) {
+                        result['vpcs'] = vpcs.assets.map(function(vpc) {return vpc[0].vpc_id;});
+                    }
+                    callback(null, result);
+                } else {
+                    console.error("Failed to get protected VPCs for '%s' environment in '%s' region. Error: %s",
+                                params.environmentId, params.awsRegion, JSON.stringify(status));
+                    callback(status);
+                }
+            });
+        },
+        function(result, callback) {
+            whitelistApi.getWhitelistedTags(params.token, params.accountId, params.environmentId,
+                function(status, whitelist) {
+                    result['whitelist'] = [];
+                    if (status === "SUCCESS") {
+                        console.log("Whitelist for %s:%s: %s", params.accountId, params.environmentId, JSON.stringify(whitelist));
+                        result['whitelist'] = whitelist;
+                        return callback(status, result);
+                    } else {
+                        console.error("Failed to get whitelist for '%s' environment in '%s' region. Error: %s",
+                                    params.environmentId, params.awsRegion, JSON.stringify(status));
+                        return callback(status);
+                    }
+                }
+            );
         }
+    ], function(err, result) {
+        return resultCallback(err, result);
     });
 }
 

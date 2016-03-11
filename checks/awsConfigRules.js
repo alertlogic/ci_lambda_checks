@@ -1,31 +1,31 @@
 var config          = require('../config.js'),
     AWS             = require('aws-sdk'),
     checkName       = "awsConfigRules",
-    awsConfigRules  = function(eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
+    awsConfigRules  = function(input, callback) {
     "use strict";
-    if (!inScope) {
+    if (!input.inScope) {
         return callback(null, false);
     }
 
-    AWS.config.update({region: awsRegion});
+    AWS.config.update({region: input.awsRegion});
     var awsConfig       = new AWS.ConfigService(),
         params = {};
-    switch (eventType) {
+    switch (input.eventType) {
         case 'configRule':
             params      = {
-                "ResourceId":   rawMessage.resourceId,
-                "ResourceType": rawMessage.resourceType
+                "ResourceId":   input.message.resourceId,
+                "ResourceType": input.message.resourceType
             };
             break;
         case 'snapshotEvent':
         case 'configurationItem':
-            if (rawMessage.configurationItem.configurationItemStatus !== "OK" && 
-                    rawMessage.configurationItem.configurationItemStatus !== "ResourceDiscovered") {
+            if (input.message.configurationItem.configurationItemStatus !== "OK" && 
+                    input.message.configurationItem.configurationItemStatus !== "ResourceDiscovered") {
                 return callback(null, false);
             }
             params      = {
-                "ResourceId":   rawMessage.configurationItem.resourceId,
-                "ResourceType": rawMessage.configurationItem.resourceType
+                "ResourceId":   input.message.configurationItem.resourceId,
+                "ResourceType": input.message.configurationItem.resourceType
             };
             break;
         default:
@@ -33,10 +33,10 @@ var config          = require('../config.js'),
     }
 
     console.log("awsConfigRules: Analyzing: '" + JSON.stringify(params));
-    executeAwsApi(awsConfig.getComplianceDetailsByResource.bind(awsConfig), (eventType === 'snapshotEvent') ? 0 : 60000, params, function(err, result) {
+    executeAwsApi(awsConfig.getComplianceDetailsByResource.bind(awsConfig), (input.eventType === 'snapshotEvent') ? 0 : 60000, params, function(err, result) {
         if (err) {
-            console.log("awsConfigRules check failed. ResourceId: '" + rawMessage.configurationItem.resourceId +
-                        "', Region: '" + awsRegion + "'. getComplianceDetailsByResource returned: " + JSON.stringify(err));
+            console.log("awsConfigRules check failed. ResourceId: '" + input.message.configurationItem.resourceId +
+                        "', Region: '" + input.awsRegion + "'. getComplianceDetailsByResource returned: " + JSON.stringify(err));
             return callback(null, false);
         }
         var vulnerabilities = [];

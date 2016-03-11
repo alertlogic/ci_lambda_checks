@@ -8,13 +8,12 @@ var https   = require('https'),
     /*
      * Fetches any single item from a service
      */
-    getOne = function(token, service, endpoint, id, callback) {
+    getOne = function(token, params, callback) {
         "use strict";
-        var accountId = getAccountId(token),
-            options   = {
+        var options   = {
                 hostname: config.api_url,
                 port: 443,
-                path: '/' + service + '/' + version + '/' + accountId + '/' + endpoint +'/' + id,
+                path: getPath(params, token),
                 method: 'GET',
                 headers: {
                     "user-agent": client,
@@ -40,7 +39,7 @@ var https   = require('https'),
             });
 
         req.on('error', function(e) {
-            console.log('Call to ' + service + ' for ' + endpoint + ' failed because:\n' + e.message);
+            console.log('Failed to fetch an item. Params: ' + JSON.stringify(params) + '. Error: ' + e.message);
             callback("FAILED", e.message);
         });
         req.end();
@@ -48,14 +47,12 @@ var https   = require('https'),
     /*
      * Fetches a set of items from a service based on filters
      */
-    getMany = function(token, service, endpoint, id, query, callback) {
+    getMany = function(token, params, callback) {
         "use strict";
-        var accountId = getAccountId(token),
-            result    = parseQueryString(query),
-            options   = {
+        var options   = {
                 hostname: config.api_url,
                 port: 443,
-                path: '/' + service + '/' + version + '/' + accountId + '/' + endpoint + '/' + id + '/' + service + result,
+                path: getPath(params, token),
                 method: 'GET',
                 headers: {
                     "user-agent": client,
@@ -81,7 +78,7 @@ var https   = require('https'),
             });
 
         req.on('error', function(e) {
-            console.log('Call to ' + service + ' for ' + endpoint + ' failed because:\n' + e.message);
+            console.log('Failed to fetch a set of items. Params: ' + JSON.stringify(params) + '. Error: ' + e.message);
             callback("FAILED", e.message);
         });
         req.end();
@@ -89,14 +86,12 @@ var https   = require('https'),
     /*
      * Fetches any set of items from a service
      */
-    getAll = function(token, service, endpoint, query, callback) {
+    getAll = function(token, params, callback) {
         "use strict";
-        var accountId = getAccountId(token),
-            result    = parseQueryString(query),
-            options   = {
+        var options   = {
                 hostname: config.api_url,
                 port: 443,
-                path: '/' + service + '/' + version + '/' + accountId + '/' + endpoint + result,
+                path: getPath(params, token),
                 method: 'GET',
                 headers: {
                     "user-agent": client,
@@ -122,7 +117,7 @@ var https   = require('https'),
             });
 
         req.on('error', function(e) {
-            console.log('Call to ' + service + ' for ' + endpoint + ' failed because:\n' + e.message);
+            console.log('Failed to fetch any item. Params: ' + JSON.stringify(params) + '. Error: ' + e.message);
             callback("FAILED", e.message);
         });
         req.end();
@@ -138,6 +133,28 @@ function getAccountId(token) {
         config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
     }
     return config.accountId;
+}
+
+/*
+ * Generate URL Path from params
+ */
+function getPath(params, token) {
+    "use strict";
+    var apiVersion = params.hasOwnProperty('version') ? params.version : version,
+        accountId = params.hasOwnProperty('accountId') ? params.accountId : getAccountId(token),
+        queryParams = params.hasOwnProperty('query') ? parseQueryString(params.query) : '',
+        path = '/' + params.service + '/' + apiVersion + '/' + accountId;
+
+    if (params.hasOwnProperty('endpoint')) {
+        path = path + '/' + params.endpoint;
+    }
+    if (params.hasOwnProperty('id')) {
+        path = path + '/' + params.id;
+    }
+    if (params.hasOwnProperty('prefix')) {
+        path = path + '/' + params.prefix;
+    }
+    return path + queryParams;
 }
 
 /*

@@ -1,10 +1,10 @@
 var config            = require('../config.js'),
-    namingConvention = function(_eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
+    namingConvention = function(input, callback) {
     "use strict";
     var result = {vulnerable: false, evidence: []};
-    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
-        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
-        var resourceName = getResourceName(rawMessage.configurationItem.tags),
+    if (input.message.configurationItem.configurationItemStatus === "OK" ||
+        input.message.configurationItem.configurationItemStatus === "ResourceDiscovered") {
+        var resourceName = getResourceName(input.message.configurationItem.tags),
             conventions = config.checks.namingConvention.configuration.conventions;
 
         if (resourceName == null) {
@@ -12,7 +12,7 @@ var config            = require('../config.js'),
             return callback(null, result);
         }
 
-        result.evidence = matchesConventions(rawMessage.configurationItem.resourceType, resourceName, conventions);
+        result.evidence = matchesConventions(input.message.configurationItem.resourceType, resourceName, conventions);
         if (result.evidence && result.evidence.length) {
             result.vulnerable = true;
             console.log("namingConvention: Creating naming convention vulnerability. Result: %s",

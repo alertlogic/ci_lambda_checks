@@ -1,14 +1,14 @@
 var config            = require('../config.js'),
-    requiredTags      = function(_eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
+    requiredTags      = function(input, callback) {
     "use strict";
     var evidence = [];
-    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
-        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
+    if (input.message.configurationItem.configurationItemStatus === "OK" ||
+        input.message.configurationItem.configurationItemStatus === "ResourceDiscovered") {
         /*
         * Only evaluate policies applicable to the resource type specified in the event.
         */
         var policies = config.checks.requiredTags.configuration.policies.filter(function(policy) {
-            return policy.resourceTypes.indexOf(rawMessage.configurationItem.resourceType) >= 0;
+            return policy.resourceTypes.indexOf(input.message.configurationItem.resourceType) >= 0;
         });
 
         if (!policies.length) {
@@ -18,8 +18,7 @@ var config            = require('../config.js'),
         
         for (var i = 0; i <  policies.length; i++) {
             var res = validateTags(
-                    // rawMessage.configurationItem.resourceType,
-                    rawMessage.configurationItem.tags,
+                    input.message.configurationItem.tags,
                     policies[i]);
             if (res && res.length) {
                 evidence.concat(res); 
