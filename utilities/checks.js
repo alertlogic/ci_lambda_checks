@@ -20,7 +20,7 @@ var isValidMode = function(checkMode, eventType) {
 var getCheckMode = function(check) {
     "use strict";
     if (check.hasOwnProperty('mode')) {
-        return check.mode;
+        return check.mode.toString();
     } else {
         return ['configurationItem',  'snapshotEvent', 'configRule'];
     }
