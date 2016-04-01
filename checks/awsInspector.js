@@ -1,39 +1,37 @@
 var async           = require('async'),
-    AWS             = require('aws-sdk');
-
-var awsInspector = function(eventType, inScope, awsRegion, vpcId, rawMessage, callback) {
+    AWS             = require('aws-sdk'),
+    awsInspector    = function(input, callback) {
     "use strict";
-    if (eventType !== 'scheduledEvent') {
+    if (input.eventType !== 'scheduledEvent') {
         return callback(null, false);
     }
 
-    AWS.config.update({region: awsRegion});
-    return getFindings(new AWS.Inspector({apiVersion: '2015-08-18'}), callback);
+    AWS.config.update({region: input.awsRegion});
+    return getFindings(new AWS.Inspector({apiVersion: '2016-02-16'}), callback);
 };
 
 function getFindings(inspector, resultsCallback) {
     "use strict";
     var results = [],
-        params  = {},
+        params  = {"maxResults": 500},
         nextToken = null;
 
     async.doWhilst(
         function(callback) {
             if (null != nextToken) {
                 params['nextToken'] = nextToken;
-            } 
+            }
 
             executeAwsApi(inspector.listFindings.bind(inspector), params, function(err, data) {
                 if (err) {
                     console.log("awsInspector check failed. listFindings returned: '%s'", JSON.stringify(err));
                     return callback(err);
                 }
-                processFindings(data.findingArnList, inspector, function(err, data) {
-                    if (err) {
-                        return callback(err);
-                    }
-                    nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
-                    results = results.concat(data);
+                nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
+
+                processFindings(data.findingArns, inspector, function (err, findings) {
+                    if (err) { return callback(err); }
+                    results = results.concat(findings);
                     return callback(null);
                 });
             });
@@ -55,79 +53,29 @@ function getFindings(inspector, resultsCallback) {
     );
 }
 
-function processFindings(findingsArns, inspector, callback) {
+function processFindings(findingArns, inspector, resultsCallback) {
     "use strict";
-    async.map(findingsArns,
-        function(findingArn, cb) {
-            executeAwsApi(inspector.describeFinding.bind(inspector), {"findingArn": findingArn}, function(err, data) {
+    var results = [];
+    console.log("Processing %s findings.", findingArns.length);
+    async.whilst(
+        function() { return findingArns.length !== 0; },
+        function(callback) {
+            var params = {
+                "findingArns": findingArns.splice(0, 10)
+            };
+            executeAwsApi(inspector.describeFindings.bind(inspector), params, function(err, result) {
                 if (err) {
-                    console.log("awsInspector check failed. describeFinding returned: '%s'", JSON.stringify(err));
-                    return cb(err);
+                    console.log("describeFindings failed. Error: %s", JSON.stringify(err, null, 4));
+                    return callback(err);
                 }
-                return expendFinding(data.finding, inspector, function(err, result) {
-                    if (err) {
-                        return cb(err);
-                    }
-                    return cb(null, result);
-                });
-            });
-        },
-        function(err, results) {
-            if (err) {
-                return callback(err);
-            }
-            return callback(null, results);
-        }
-    );
-}
 
-function expendFinding(data, inspector, callback) {
-    "use strict";
-    var finding = {},
-        description = {},
-        recommendation = {};
-    async.waterfall([
-        function(cb) {
-            var params = {'localizedTexts': [data.finding], 'locale': 'en_US'};
-            executeAwsApi(inspector.localizeText.bind(inspector), params, function(err, result) {
-                if (err) {
-                    console.log("awsInspector check failed. localizeText returned: '%s'", JSON.stringify(err));
-                    return cb(err);
-                }
-                finding = result;
-                return cb(null);
+                results = results.concat(result.findings);
+                callback(null);
             });
         },
-        function(cb) {
-            var params = {'localizedTexts': [data.description], 'locale': 'en_US'};
-            executeAwsApi(inspector.localizeText.bind(inspector), params, function(err, result) {
-                if (err) {
-                    console.log("awsInspector check failed. localizeText returned: '%s'", JSON.stringify(err));
-                    return cb(err);
-                }
-                description = result;
-                return cb(null);
-            });
-        },
-        function(cb) {
-            var params = {'localizedTexts': [data.recommendation], 'locale': 'en_US'};
-            executeAwsApi(inspector.localizeText.bind(inspector), params, function(err, result) {
-                if (err) {
-                    console.log("awsInspector check failed. localizeText returned: '%s'", JSON.stringify(err));
-                    return cb(err);
-                }
-                recommendation = result;
-                return cb(null);
-            });
-        }], function(err) {
-            if (err) {
-                return callback(err);
-            }
-            var result = data;
-            result['finding'] = finding.results;
-            result['description'] = description.results;
-            result['recommendation'] = recommendation.results;
-            return callback(null, result);
+        function(err) {
+            if (err) { return resultsCallback(err); }
+            return resultsCallback(null, results);
         }
     );
 }
@@ -168,7 +116,9 @@ function getVulnerabilitiesFromFindings(findings) {
     var result = {};
     for (var i = 0; i < findings.length; i++) {
         var vulnerability = getVulnerability(findings[i]),
-            instanceId = findings[i].agentId;
+            instanceId = findings[i].assetAttributes.agentId;
+        if (!vulnerability) { continue; }
+
         if (result.hasOwnProperty(instanceId)) {
             result[instanceId].vulnerabilities.push(vulnerability);
         } else {
@@ -183,40 +133,32 @@ function getVulnerabilitiesFromFindings(findings) {
 
 function getVulnerability(inspectorData) {
     "use strict";
+    if (!inspectorData.hasOwnProperty('id')) { return null; }
+
     return  {
-        id: makeId("custom-aws-inspector-" + inspectorData.ruleName),
-        name: "AWS Inspector '" + inspectorData.ruleName + "' Rule Violation",
-        description: inspectorData.description[0],
-        remediation: makeRemediation(inspectorData.recommendation[0]),
-        resolution: inspectorData.recommendation[0],
+        id: makeId("custom-aws-inspector-" + inspectorData.id),
+        name: "AWS Inspector '" + inspectorData.id + "' Violation",
+        description: inspectorData.description,
+        remediation: makeRemediation(inspectorData.recommendation),
+        resolution: inspectorData.recommendation,
         risk: inspectorData.severity,
         scope: "host",
-        ccss_score: getScore(inspectorData.severity),
+        ccss_score: inspectorData.numericSeverity,
         resolution_type:"Reconfigure Assets",
         reference:"https://docs.aws.amazon.com/inspector/latest/userguide/inspector_findings.html",
-        pci_concern: inspectorData.ruleName.indexOf('PCI') === -1 ? "N/A" : inspectorData.ruleName,
+        pci_concern: inspectorData.id.indexOf('PCI') === -1 ? "N/A" : inspectorData.id,
         ccss_vector: "N/A",
         evidence: JSON.stringify({
-                    'findingArn': inspectorData.findingArn,
-                    'runArn': inspectorData.runArn,
-                    'rulesPackageArn': inspectorData.rulesPackageArn,
-                    'ruleName': inspectorData.ruleName,
-                    'finding': inspectorData.finding,
+                    'findingArn': inspectorData.arn,
+                    'assessmentRunArn': inspectorData.serviceAttributes.assessmentRunArn,
+                    'rulesPackageArn': inspectorData.serviceAttributes.rulesPackageArn,
+                    'id': inspectorData.id,
+                    'title': inspectorData.title,
                     'attributes': inspectorData.attributes,
                     'userAttributes': inspectorData.userAttributes
                 }),
         type:   "application/json"
     };
-}
-
-function getScore(severity) {
-    "use strict";
-    switch (severity) {
-        case 'High': return "10.0";
-        case 'Medium': return "5.0";
-        case 'Low': return "2.5";
-        default: return "1.0";
-    }
 }
 
 function makeId(id) {
@@ -227,7 +169,7 @@ function makeId(id) {
 function makeRemediation(remediation) {
     "use strict";
     if (remediation.charAt(0) === '\n') {
-        remediation = remediation.slice(1).split(/[\n.]/)[0]; 
+        remediation = remediation.slice(1).split(/[\n.]/)[0];
     }
     var res = remediation.split(/[\n.]/)[0].trim();
     if (res.charCodeAt(res.length - 1) < 65 ||

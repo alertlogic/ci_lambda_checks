@@ -383,8 +383,7 @@ function getLambdaPolicies(lambdaSetup) {
                         "Effect": "Allow",
                         "Action": [
                             "inspector:ListFindings",
-                            "inspector:DescribeFinding",
-                            "inspector:LocalizeText"
+                            "inspector:DescribeFindings"
                         ],
                         "Resource": [
                             "*"
