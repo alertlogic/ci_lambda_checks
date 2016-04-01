@@ -85,6 +85,10 @@ exports.handler = function(event, context) {
                     sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
                         var source = row.source;
                         sources.getCredential(token, source.config.aws.credential.id,function(status, credential) {
+                            if (!credential.credential.hasOwnProperty('iam_role')) {
+                                return sourcesAsyncCallback(null);
+                            }
+
                             var sourcesAwsAccountId = credential.credential.iam_role.arn.split(":")[4];
                             if (sourcesAwsAccountId !== data.awsAccountId) {
                                 // Don't do anything for aws accounts other then the current one
