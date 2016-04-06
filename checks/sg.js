@@ -1,11 +1,11 @@
 var BitArray       = require('../utilities/bit_array.js'),
     config         = require('../config.js'),
-    sg             = function(_eventType, inScope, awsRegion, vpcId, rawMessage, callback)  {
+    sg             = function(input, callback)  {
     "use strict";
     var result = {vulnerable: false, evidence: []};
-    if (rawMessage.configurationItem.configurationItemStatus === "OK" ||
-        rawMessage.configurationItem.configurationItemStatus === "ResourceDiscovered") {
-        var ingressRules = rawMessage.configurationItem.configuration.ipPermissions,
+    if (input.message.configurationItem.configurationItemStatus === "OK" ||
+        input.message.configurationItem.configurationItemStatus === "ResourceDiscovered") {
+        var ingressRules = input.message.configurationItem.configuration.ipPermissions,
             sgAclEntries = new BitArray(65535, 0),
             allowedPorts = getAllowedPorts(),
             index;
@@ -22,7 +22,7 @@ var BitArray       = require('../utilities/bit_array.js'),
                 }
             ];
             result.vulnerable = true;
-            console.log("Creating security group vulnerability for '" + rawMessage.configurationItem.resourceId +
+            console.log("Creating security group vulnerability for '" + input.message.configurationItem.resourceId +
                         "': '" + JSON.stringify(result) + "'");
             return callback(null, result);
         }

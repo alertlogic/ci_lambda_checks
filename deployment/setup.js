@@ -75,7 +75,7 @@ function isValidEnvironment(awsAccountId, profile, callback) {
             if (user.Arn.split(":")[4] === awsAccountId) {
                 callback(false);
             } else {
-                console.log("Skipping deploymeny for '" + awsAccountId + "' account. Credentials specified in '" +
+                console.log("Skipping deployment for '" + awsAccountId + "' account. Credentials specified in '" +
                             profile + "' profile didn't match target account. " +
                             "Account referenced in profile credentials '" + user.Arn.split(":")[4] +
                             "'. Account referenced: " + awsAccountId);

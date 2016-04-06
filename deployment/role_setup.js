@@ -373,7 +373,26 @@ function getLambdaPolicies(lambdaSetup) {
                     }
                 ]
             }
+        },
+        {
+            name: "aws_inspector_read_only_policy",
+            policyDocument: {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "inspector:ListFindings",
+                            "inspector:DescribeFindings"
+                        ],
+                        "Resource": [
+                            "*"
+                        ]
+                    }
+                ]
+            }
         }
+
     ];
 
     if (!lambdaSetup.hasOwnProperty("subscribe") || !lambdaSetup.subscribe) {

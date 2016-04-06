@@ -143,6 +143,10 @@ prompt.get(ciLogin, function (err, result) {
                 async.eachSeries(rows, function(row, sourcesAsyncCallback) {
                     var source = row.source;
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
+                        if (!credential.credential.hasOwnProperty('iam_role')) {
+                            return sourcesAsyncCallback();
+                        }
+
                         var environmentId   = source.id,
                             awsAccountId    = credential.credential.iam_role.arn.split(":")[4],
                             awsRegions         = [];
