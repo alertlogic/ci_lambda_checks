@@ -142,6 +142,9 @@ prompt.get(ciLogin, function (err, result) {
                     awsAccounts = {};
                 async.eachSeries(rows, function(row, sourcesAsyncCallback) {
                     var source = row.source;
+                    if (!source.config.aws.hasOwnProperty('credential') || !source.config.aws.credential.hasOwnProperty('id')) {
+                        return sourcesAsyncCallback();
+                    }
                     sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
                         if (!credential.credential.hasOwnProperty('iam_role')) {
                             return sourcesAsyncCallback();

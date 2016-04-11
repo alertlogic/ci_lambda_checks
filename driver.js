@@ -84,8 +84,12 @@ exports.handler = function(event, context) {
                     var sourcesAsync = require('async');
                     sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
                         var source = row.source;
+                        if (!source.config.aws.hasOwnProperty('credential') || !source.config.aws.credential.hasOwnProperty('id')) {
+                            return sourcesAsyncCallback(null);
+                        }
+
                         sources.getCredential(token, source.config.aws.credential.id,function(status, credential) {
-                            if (!credential.credential.hasOwnProperty('iam_role')) {
+                            if (!credential.credential.hasOwnProperty('iam_role') || !credential.credential.iam_role.hasOwnProperty('arn')) {
                                 return sourcesAsyncCallback(null);
                             }
 
