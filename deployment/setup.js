@@ -148,7 +148,7 @@ function deployRegion(params, logger, callback) {
                     description:    "CloudInsight Custom Checks Driver",
                     handler:        defaultDriverHandlerName,
                     roleName:       defaultLambdaRoleName,
-                    runtime:        'nodejs',
+                    runtime:        'nodejs4.3',
                     timeout:        300,
                     subscribe:      true,
                     zipFile:        code
