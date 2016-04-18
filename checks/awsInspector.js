@@ -2,37 +2,123 @@ var async           = require('async'),
     AWS             = require('aws-sdk'),
     awsInspector    = function(input, callback) {
     "use strict";
-    if (input.eventType !== 'scheduledEvent') {
-        return callback(null, false);
+
+    switch (input.eventType) {
+        case 'scheduledEvent':
+            break;
+        case 'inspectorEvent':
+            if (!input.message.hasOwnProperty('event') || input.message.event !== 'ASSESSMENT_RUN_COMPLETED') {
+                return callback(null, false);
+            }
+            break;
+        default:
+            return callback(null, false);
     }
 
     AWS.config.update({region: input.awsRegion});
-    return getFindings(new AWS.Inspector({apiVersion: '2016-02-16'}), callback);
+    return handleInspectorEvent(callback);
 };
 
-function getFindings(inspector, resultsCallback) {
+function handleInspectorEvent(callback) {
     "use strict";
-    var results = [],
-        params  = {"maxResults": 500},
-        nextToken = null;
+    var results = [];
+    getAssessmentRunArns(function(err, assessmentRunArns, instances) {
+        if (err) {
+            return callback(err);
+        }
+        if (!assessmentRunArns) {
+            return callback(null, false);
+        }
+
+        async.whilst(
+            function() { return assessmentRunArns.length > 0; },
+            function(next) {
+                var params = {
+                        "assessmentRunArns": assessmentRunArns.splice(0, 2)
+                    };
+                getFindings(params, function(err, findings) {
+                    if (err) { return next(err); }
+                    results = results.concat(findings);
+                    next(null);
+                });
+            },
+            function(err) {
+                if (err) { return callback(null, results); }
+
+                if (results.length) {
+                    return callback(null, {'vulnerable': true, 'data': getVulnerabilitiesFromFindings(instances, results)});
+                } else {
+                    return callback(null, false);
+                }
+            }
+        );
+    });
+}
+
+function getAssessmentRunArns(callback) {
+    "use strict";
+    async.waterfall([
+        function(next) {
+            return getAssessmentTemplates(next);
+        },
+
+        function(assessmentTemplateArns, next) {
+            return getAssessmentRuns(assessmentTemplateArns, next);
+        },
+        function(assessmentRunArns, next) {
+            async.reduce(assessmentRunArns, {}, getAssessmentInstances, function(err, instances) {
+                next(null, assessmentRunArns, instances);
+            });
+        }
+    ], function(err, assessmentRunArns, instances) {
+        return callback(err, assessmentRunArns, instances);
+    });
+}
+
+function getAssessmentTemplates(callback) {
+    "use strict";
+    var inspector = new AWS.Inspector({apiVersion: '2016-02-16'});
+
+    // Get the list of assessment templates
+    executeAwsApi(inspector.listAssessmentTemplates.bind(inspector), {}, function(err, data) {
+        if (err) {
+            return callback(err);
+        }
+        return callback(null, data.assessmentTemplateArns);
+    });
+}
+
+// Get the list of assessment runs
+function getAssessmentRuns(assessmentTemplateArns, callback) {
+    "use strict";
+    var inspector = new AWS.Inspector({apiVersion: '2016-02-16'}),
+        results = {},
+        nextToken = null,
+        params = {
+            "assessmentTemplateArns": assessmentTemplateArns,
+            "filter": {
+                "states": ["COMPLETED"]
+            }
+        };
 
     async.doWhilst(
-        function(callback) {
+        function(next) {
             if (null != nextToken) {
                 params['nextToken'] = nextToken;
             }
 
-            executeAwsApi(inspector.listFindings.bind(inspector), params, function(err, data) {
+
+            executeAwsApi(inspector.listAssessmentRuns.bind(inspector), params, function(err, data) {
                 if (err) {
-                    console.log("awsInspector check failed. listFindings returned: '%s'", JSON.stringify(err));
-                    return callback(err);
+                    console.log("awsInspector check failed. listAssessmentRuns returned: '%s'", JSON.stringify(err));
+                    return next(err);
                 }
                 nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
 
-                processFindings(data.findingArns, inspector, function (err, findings) {
+                processAssessmentRuns(data.assessmentRunArns, results, function(err, runs) {
                     if (err) { return callback(err); }
-                    results = results.concat(findings);
-                    return callback(null);
+                    results = runs;
+                    return next(null);
                 });
             });
         },
@@ -40,28 +126,160 @@ function getFindings(inspector, resultsCallback) {
             return null !== nextToken;
         },
         function(err) {
-            if (err) {
-                return resultsCallback(null, false);
-            }
-            var data = getVulnerabilitiesFromFindings(results);
-            if (results.length) {
-                return resultsCallback(null, {'vulnerable': true, 'data': data});
-            } else {
-                return resultsCallback(null, false);
-            }
+            if (err) {return callback(err);}
+            return callback(null, extractArns(results));
         }
     );
 }
 
-function processFindings(findingArns, inspector, resultsCallback) {
+function processAssessmentRuns(assessmentRunArns, runs, callback) {
     "use strict";
-    var results = [];
+    var inspector = new AWS.Inspector({apiVersion: '2016-02-16'});
+
+    console.log("Processing %s assessment runs.", assessmentRunArns.length);
+    async.whilst(
+        function() { return assessmentRunArns.length !== 0; },
+        function(next) {
+            var params = {
+                "assessmentRunArns": assessmentRunArns.splice(0, 5)
+            };
+    
+            executeAwsApi(inspector.describeAssessmentRuns.bind(inspector), params, function(err, data) {
+                if (err) {
+                    console.log("awsInspector check failed. describeAssessmentRuns returned: '%s'",
+                                JSON.stringify(err));
+                    return next(err);
+                }
+                runs = appendAssessmentRuns(data.assessmentRuns, runs);
+                return next(null);
+            });
+        },
+        function(err) {
+            if (err) { return callback(err); }
+            return callback(null, runs);
+        }
+    );
+}
+
+function appendAssessmentRuns(assessmentRuns, result) {
+    "use strict";
+    for (var i = 0; i < assessmentRuns.length; i++) {
+        if (result.hasOwnProperty(assessmentRuns[i].assessmentTemplateArn)) {
+            if (result[assessmentRuns[i].assessmentTemplateArn].completedAt < assessmentRuns[i].completedAt) {
+                result[assessmentRuns[i].assessmentTemplateArn].runArn = assessmentRuns[i].arn; 
+            }
+        } else {
+            result[assessmentRuns[i].assessmentTemplateArn] = {
+                "runArn": assessmentRuns[i].arn,
+                "completedAt": assessmentRuns[i].completedAt 
+            };
+        }
+    }
+    return result;
+}
+
+function getAssessmentInstances(instances, assessmentRunArn, callback) {
+    "use strict";
+    var inspector = new AWS.Inspector({apiVersion: '2016-02-16'}),
+        nextToken = null,
+        params = {"assessmentRunArn": assessmentRunArn};
+
+    async.doWhilst(
+        function(next) {
+            if (null != nextToken) {
+                params['nextToken'] = nextToken;
+            }
+
+            executeAwsApi(inspector.listAssessmentRunAgents.bind(inspector), params, function(err, data) {
+                if (err) {
+                    console.log("awsInspector check failed. listAssessmentRunAgents returned: '%s'", JSON.stringify(err));
+                    return next(err);
+                }
+                nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
+
+                for (var i = 0; i < data.assessmentRunAgents.length; i++) {
+                    var agentId = data.assessmentRunAgents[i].agentId;
+                    if (!instances.hasOwnProperty(agentId)) {
+                        instances[agentId] = {
+                            'resourceType': 'AWS::EC2::Instance',
+                            'vulnerabilities': [] 
+                        };
+                    }
+                }
+                return next(null);
+            });
+        },
+        function() {
+            return null !== nextToken;
+        },
+        function(err) {
+            return callback(err, instances);
+        }
+    );
+}
+
+function extractArns(runs) {
+    "use strict";
+    var props = Object.getOwnPropertyNames(runs);
+    if (Array.isArray(props)) {
+        var runArns = [];
+        for (var i = 0; i < props.length; i++) {
+            runArns.push(runs[props[i]].runArn);
+        }
+        return runArns;
+    } 
+    return null;
+}
+
+function getFindings(params, callback) {
+    "use strict";
+    var inspector = new AWS.Inspector({apiVersion: '2016-02-16'}),
+        results = [],
+        nextToken = null;
+
+    async.doWhilst(
+        function(next) {
+            if (null != nextToken) {
+                params['nextToken'] = nextToken;
+            }
+
+            console.log("Getting AWS Inspector findings. Params: %s", JSON.stringify(params, null, 4));
+            executeAwsApi(inspector.listFindings.bind(inspector), params, function(err, data) {
+                if (err) {
+                    console.log("awsInspector check failed. listFindings returned: '%s'", JSON.stringify(err));
+                    return next(err);
+                }
+                nextToken = data.hasOwnProperty('nextToken') ? data.nextToken : null;
+
+                processFindings(data.findingArns, function (err, findings) {
+                    if (err) { return next(err); }
+                    results = results.concat(findings);
+                    return next(null);
+                });
+            });
+        },
+        function() {
+            return null !== nextToken;
+        },
+        function(err) {
+            if (err) { 
+                return callback(null, false);
+            }
+            return callback(null, results);
+        }
+    );
+}
+
+function processFindings(findingArns, resultsCallback) {
+    "use strict";
+    var inspector = new AWS.Inspector({apiVersion: '2016-02-16'}),
+        results = [];
     console.log("Processing %s findings.", findingArns.length);
     async.whilst(
         function() { return findingArns.length !== 0; },
         function(callback) {
             var params = {
-                "findingArns": findingArns.splice(0, 10)
+                "findingArns": findingArns.splice(0, 2)
             };
             executeAwsApi(inspector.describeFindings.bind(inspector), params, function(err, result) {
                 if (err) {
@@ -111,24 +329,24 @@ function executeAwsApiEx(fun, params, callback, lastError, retries) {
     });
 }
 
-function getVulnerabilitiesFromFindings(findings) {
+function getVulnerabilitiesFromFindings(instances, findings) {
     "use strict";
-    var result = {};
     for (var i = 0; i < findings.length; i++) {
         var vulnerability = getVulnerability(findings[i]),
             instanceId = findings[i].assetAttributes.agentId;
         if (!vulnerability) { continue; }
 
-        if (result.hasOwnProperty(instanceId)) {
-            result[instanceId].vulnerabilities.push(vulnerability);
+        if (instances.hasOwnProperty(instanceId)) {
+            instances[instanceId].vulnerabilities.push(vulnerability);
         } else {
-            result[instanceId] = {
+            // Should never get here
+            instances[instanceId] = {
                 'resourceType': 'AWS::EC2::Instance',
                 'vulnerabilities': [vulnerability] 
             };
         }
     }
-    return result;
+    return instances;
 }
 
 function getVulnerability(inspectorData) {
@@ -191,5 +409,7 @@ function makeRemediation(remediation) {
     }
     return res;
 }
+
+
 
 module.exports = awsInspector;

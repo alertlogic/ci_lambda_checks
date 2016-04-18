@@ -17,21 +17,28 @@ exports.handler = function(event, context) {
         data['awsAccountId'] = event.account;
         data['awsRegion'] = event.region;
         data['message'] = event;
-
     } else {
         var record  = event.Records[0],
-            message = JSON.parse(event.Records[0].Sns.Message),
-            subject = record.Sns.Subject;
+            message = JSON.parse(event.Records[0].Sns.Message);
 
         if (!isSupportedEvent(message)) {
-            console.log("'" + subject + "' is not supported");
+            console.log("%s event is not supported", JSON.stringify(event, null, 4));
             return context.succeed();
         }
 
-        data['record'] = record;
-        data['message'] = message;
-        data['awsAccountId'] = getAccountIdFromSubject(subject);
-        data['awsRegion'] = getAwsRegionFromSubject(subject);
+        if (message.hasOwnProperty('template')) {
+            var arn = message.template.split(':');
+            data['record'] = {};
+            data['awsAccountId'] = arn[4];
+            data['awsRegion'] = arn[3];
+            data['message'] = message;
+        } else {
+            var subject = record.Sns.Subject;
+            data['record'] = record;
+            data['message'] = message;
+            data['awsAccountId'] = getAccountIdFromSubject(subject);
+            data['awsRegion'] = getAwsRegionFromSubject(subject);
+        }
     }
 
     var supportedAssetTypesHashtable = getSupportedAssetTypes(config.checks);
@@ -208,6 +215,18 @@ function processAwsConfigEvent(params, message, callback) {
                     params['whitelist'] = result.whitelist;
                     return callWorker(params,  callback);
                 });
+
+            case 'inspectorEvent':
+                return analyze(params, function(status, result) {
+                    if (status !== "SUCCESS") {
+                        return callback(status);
+                    }
+                    params['message']  = message;
+                    params['vpcs']      = result.vpcs;
+                    params['whitelist'] = result.whitelist;
+                    return callWorker(params,  callback);
+                });
+
 
             default: 
                 console.log("Attempted to process unsupported record. Event: " + JSON.stringify(params.record));
@@ -396,6 +415,8 @@ function isSupportedEvent(message) {
             (message.hasOwnProperty('messageType') &&
             message.messageType === 'ConfigurationSnapshotDeliveryCompleted')) {
         return true;
+    } else if (message.hasOwnProperty('template') && message.template.startsWith('arn:aws:inspector')) {
+        return true;
     } else {
         return false;
     }
@@ -470,6 +491,10 @@ function getEventType(message) {
 
     if (message.hasOwnProperty('detail-type') && message['detail-type'] === 'Scheduled Event') {
         return 'scheduledEvent';
+    }
+
+    if (message.hasOwnProperty('template') && message.template.startsWith('arn:aws:inspector')) {
+        return 'inspectorEvent';
     }
 
     return null;

@@ -37,6 +37,7 @@ exports.handler = function(args, context) {
             break;
 
         case 'scheduledEvent':
+        case 'inspectorEvent':
             break;
 
         default:
@@ -90,10 +91,9 @@ function applyChecks(params, resultCallback) {
                                   config.accountId, config.environmentId, check.name.toString(), JSON.stringify(err));
                     return callback();
                 } else {
-                    console.log("Worker [%s:%s]: '%s' custom check returned: %s. Typeof: %s",
+                    console.log("Worker [%s:%s]: '%s' custom check returned: result with a typeof: %s",
                                 config.accountId, config.environmentId,
-                                check.name.toString(), JSON.stringify(result),
-                                typeof result);
+                                check.name.toString(), typeof result);
                     if (typeof result === 'object' && result.vulnerable === true) {
                         if (result.hasOwnProperty('data')) {
                             async.each(Object.getOwnPropertyNames(result.data), function(assetName, cb) {
@@ -119,9 +119,11 @@ function applyChecks(params, resultCallback) {
                     } else if (result === true) {
                         // Publish a result against the available metadata
                         publishResult(params.token, metadata, [check.vulnerability], callback);
-                    } else {
+                    } else if (params.resourceType.length && params.resourceId.length) {
                         // Clear a result against the available metadata
                         publishResult(params.token, metadata, [], callback);
+                    } else {
+                        return callback();
                     }
                 }
             });
@@ -137,11 +139,8 @@ function applyChecks(params, resultCallback) {
             winston.error("Worker [%s:%s]: Failed to handle driver message. Params: '%s', Error: '%s'.",
                           config.accountId, config.environmentId, JSON.stringify(params), JSON.stringify(err));
             return resultCallback(err);
-        } else { 
-            winston.info("Worker [%s:%s]: Successfully handled driver message.",
-                         config.accountId, config.environmentId);
-            return resultCallback();
         }
+        return resultCallback();
     });
 }
 
@@ -201,6 +200,7 @@ function getVpcId(eventType, resourceType, resourceId, message) {
     var vpcId = null;
     switch (eventType) {
         case 'scheduledEvent':
+        case 'inspectorEvent':
             break;
         case 'configRule':
             if (!message.hasOwnProperty('configurationItem')) {
