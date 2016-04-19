@@ -386,7 +386,8 @@ function getLambdaPolicies(lambdaSetup) {
                             "inspector:DescribeFindings",
                             "inspector:ListAssessmentTemplates",
                             "inspector:ListAssessmentRuns",
-                            "inspector:DescribeAssessmentRuns"
+                            "inspector:DescribeAssessmentRuns",
+                            "inspector:ListAssessmentRunAgents"
                         ],
                         "Resource": [
                             "*"
