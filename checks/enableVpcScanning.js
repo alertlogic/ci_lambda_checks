@@ -124,7 +124,7 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, message, whitelist, call
                 return callback(err);
             } else {
                 reportStatus("Appliance '" + instanceId + "' was launched for  protected '" +vpcId + "' VPC. Ensure VPC protection.");
-                return protectVpc(vpcId, result, ec2, callback);
+                return protectVpc(vpcId, result, whitelist, ec2, callback);
             }
         };
 
@@ -138,7 +138,7 @@ function handleInstanceEvent(inScope, awsRegion, vpcId, message, whitelist, call
         }
         // Protect instance
         reportDebug("Calling protect instances for '" + instanceId + "' in '" + vpcId + "'.");
-        return protectVpc(vpcId, [instanceId], ec2, callback);
+        return protectVpc(vpcId, [instanceId], whitelist, ec2, callback);
     }
 }
    

@@ -36,7 +36,7 @@ var config = {
                     "AWS::EC2::SecurityGroup"
                 ],
                 "approved_ports": [
-                    443,
+                    3389,
                     22
                 ]
             },
@@ -199,8 +199,13 @@ var config = {
         "awsInspector": {
             "name": "awsInspector",
             "enabled": true,
-            "mode": ["scheduledEvent"],
-            "supported": ["us-west-2"]
+            "mode": ["scheduledEvent", "inspectorEvent"],
+            "supported": [
+                'us-east-1',
+                'us-west-2',
+                'eu-west-1',
+                'ap-northeast-1'
+            ]
         }
     }
 };

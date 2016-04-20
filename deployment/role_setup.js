@@ -383,7 +383,11 @@ function getLambdaPolicies(lambdaSetup) {
                         "Effect": "Allow",
                         "Action": [
                             "inspector:ListFindings",
-                            "inspector:DescribeFindings"
+                            "inspector:DescribeFindings",
+                            "inspector:ListAssessmentTemplates",
+                            "inspector:ListAssessmentRuns",
+                            "inspector:DescribeAssessmentRuns",
+                            "inspector:ListAssessmentRunAgents"
                         ],
                         "Resource": [
                             "*"
