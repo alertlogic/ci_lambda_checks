@@ -175,7 +175,7 @@ function addRolePolicies(setupData, roleName, policies, resultCallback) {
 
 function getRoleNameFromArn(roleArn) {
     "use strict";
-    return roleArn.substr(roleArn.indexOf('/') + 1);
+    return roleArn.split('/').slice(-1)[0];
 }
 
 function getConfigPoilicies(setupData) {
