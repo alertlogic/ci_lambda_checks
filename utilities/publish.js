@@ -1,5 +1,4 @@
-var config        = require('../config.js');
-var publishResult = function(token, metadata, result, callback) {
+var publishResult = function(config, token, metadata, result, callback) {
     "use strict";
         //console.log('{Token: ' + token + '}\n');
         var boundary = "----ea78cfc4b509",

@@ -1,11 +1,13 @@
-var config          = require('../config.js'),
-    AWS             = require('aws-sdk'),
+var AWS             = require('aws-sdk'),
     checkName       = "awsConfigRules",
+    config,
     awsConfigRules  = function(input, callback) {
     "use strict";
     if (!input.inScope) {
         return callback(null, false);
     }
+
+    config = input.config;
 
     AWS.config.update({region: input.awsRegion});
     var awsConfig       = new AWS.ConfigService(),
@@ -93,6 +95,7 @@ function getResourceTypeScope(resourceType) {
         case    "AWS::EC2::RouteTable":     return "route table";
         case    "AWS::EC2::VPC":            return "vpc";
         case    "AWS::EC2::InternetGateway": return "internet gateway";
+        case    "AWS::S3::Bucket":          return "s3";
         default:                            return resourceType;
     }
 }

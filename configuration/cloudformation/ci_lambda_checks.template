@@ -253,7 +253,7 @@
                                 "       responseData = {'TopicArn': deliveryChannel.snsTopicARN, 'DeliveryChannelName': deliveryChannel.name};\n",
                                 "       return response.send(event, context, response.SUCCESS, responseData);\n",
                                 "   });\n",
-                                "}"
+                                "};"
                             ]
                         ]
                     }
@@ -314,7 +314,7 @@
                                 "       }\n",
                                 "       return response.send(event, context, response.SUCCESS);\n",
                                 "   })\n",
-                                "}"
+                                "};"
                             ]
                         ]
                     }

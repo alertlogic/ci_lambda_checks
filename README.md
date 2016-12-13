@@ -29,6 +29,31 @@ Currently this project enables integrations with 'Amazon Inspector', 'AWS Config
 - ```enableVpcScanning``` - This check evaluates whether the Cloud Insight appliance is able to scan an AWS instance, then and adds Alert Logic Security Protection Group to instances to allow Cloud Insight appliances to scan AWS instances.
 
 ## Setup
+### Deploy prepackaged CloudFormations
+
+#### Create Access Key for your account
+1. Authenticate with Cloud Insight  
+```curl -X POST -u username:password https://api.cloudinsight.alertlogic.com/aims/v1/authenticate```
+2. Create Access Key.  
+```curl -H 'x-aims-auth-token: {token}' -X POST https://api.cloudinsight.alertlogic.com/aims/v1/{user.account_id}/users/{user.id}/access_keys```   
+{token} - ```token``` field returned in JSON response to the authentication request  
+{user.account_id} - ```account_id``` field form the ```user``` section of the returned in JSON response to the authentication request  
+{user.id} - ```id``` field form the ```user``` section of the returned in JSON response to the authentication request   
+
+#### Supported AWS Regions
+  Region Name             | Region           | CloudFormation Template
+ -------------------------| -----------------| -----------------
+ US East (N. Virginia)    | us-east-1        | https://s3.amazonaws.com/alertlogic-public-repo.us-east-1/templates/ci_lambda_checks.template
+ US East (Ohio)           | us-east-2        | https://s3-us-east-2.amazonaws.com/alertlogic-public-repo.us-east-2/templates/ci_lambda_checks.template
+ US West (N. California)  | us-west-1        | https://s3-us-west-1.amazonaws.com/alertlogic-public-repo.us-west-1/templates/ci_lambda_checks.template
+ US West (Oregon)         | us-west-2        | https://s3-us-west-2.amazonaws.com/alertlogic-public-repo.us-west-2/templates/ci_lambda_checks.template
+ EU (Ireland)             | eu-west-1        | https://s3-eu-west-1.amazonaws.com/alertlogic-public-repo.eu-west-1/templates/ci_lambda_checks.template
+ EU (Frankfurt)           | eu-central-1     | https://s3-eu-central-1.amazonaws.com/alertlogic-public-repo.eu-central-1/templates/ci_lambda_checks.template
+ Asia Pacific (Tokyo)     | ap-northeast-1   | https://s3-ap-northeast-1.amazonaws.com/alertlogic-public-repo.ap-northeast-1/templates/ci_lambda_checks.template
+ Asia Pacific (Seoul)     | ap-northeast-2   | https://s3-ap-northeast-2.amazonaws.com/alertlogic-public-repo.ap-northeast-2/templates/ci_lambda_checks.template
+ Asia Pacific (Singapore) | ap-southeast-1   | https://s3-ap-southeast-1.amazonaws.com/alertlogic-public-repo.ap-southeast-1/templates/ci_lambda_checks.template
+ Asia Pacific (Sydney)    | ap-southeast-2   | https://s3-ap-southeast-2.amazonaws.com/alertlogic-public-repo.ap-southeast-2/templates/ci_lambda_checks.template
+
 ### Mac OS X  Installation Requirements
 *~ You must install XCode and accept the licensing agreement before you continue with this document ~*  
 
