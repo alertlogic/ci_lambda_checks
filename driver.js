@@ -43,12 +43,11 @@ exports.handler = function(event, context) {
             data['awsRegion'] = getAwsRegionFromSubject(subject);
         }
     }
+
     // Create global config
     console.log("Checks: %s, config: %s", process.env.checks, JSON.stringify(getChecksFromEnvironment(process.env.checks)));
     var deploymentConfig = {
-            'identifier': process.env.identifier,
             'api_url': process.env.api_url,
-            'secret':  process.env.secret,
             'checks': getChecksFromEnvironment(process.env.checks)
         };
     console.log("deploymentConfig: %s", JSON.stringify(deploymentConfig, null, 2));
@@ -56,8 +55,13 @@ exports.handler = function(event, context) {
     config = _.merge(configTemplate, deploymentConfig);
     console.log("Configuration: %s", JSON.stringify(config, null, 2));
 
-    var supportedAssetTypesHashtable = getSupportedAssetTypes(config.checks);
-    getToken(function(status, token) {
+    var supportedAssetTypesHashtable = getSupportedAssetTypes(config.checks),
+        getTokenParams = {
+            awsRegion: data.awsRegion,
+            secretName: process.env.SecretName,
+            identifier: process.env.identifier
+        };
+    getToken(getTokenParams, function(status, token) {
         if (status !== "SUCCESS") {
             console.error("Unable to retreive token, check your credentials.");
             return context.fail();
@@ -271,12 +275,12 @@ function processSnapshot(args, message, resultCallback) {
             var s3 = new AWS.S3({apiVersion: '2006-03-01'});
             s3.getBucketLocation({Bucket: message.s3Bucket}, function(err, data) {
                 if (err) {
-                    console.error("Failed to get bucket location while processing snapshot. "+
-                                  "Error: " + JSON.stringify(err));
+                    console.error("Failed to get bucket '%s' location while processing snapshot. Error: %s",
+                                  message.s3Bucket, JSON.stringify(err));
                     callback(err);
                 } else {
                     var bucketLocation  = data.LocationConstraint;
-                    console.log("Snapshot bucket location: " + bucketLocation);
+                    console.log("Snapshot bucket location: %s", bucketLocation);
                     callback(null, new AWS.S3({endpoint: getS3Endpoint(bucketLocation), apiVersion: '2006-03-01'}));
                 }
             });
@@ -286,7 +290,7 @@ function processSnapshot(args, message, resultCallback) {
                 Bucket: message.s3Bucket,
                 Key: message.s3ObjectKey
             };
-            console.log("Getting config snapshot. Parameters: " + JSON.stringify(params));
+            console.log("Getting config snapshot. Parameters: %s", JSON.stringify(params));
             s3.getObject({
                 Bucket: message.s3Bucket,
                 Key: message.s3ObjectKey
@@ -295,7 +299,7 @@ function processSnapshot(args, message, resultCallback) {
             });
         },
         function uncompress(response, callback) {
-            console.log("Uncompressing config snapshot. Parameters: " + JSON.stringify(args));
+            console.log("Uncompressing config snapshot. Parameters: %s", JSON.stringify(args));
             var data = new Buffer(response.Body);
             zlib.gunzip(data, function(err, decoded) {
                 callback(err, decoded && decoded.toString());

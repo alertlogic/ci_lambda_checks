@@ -140,6 +140,119 @@
         "IsAmazonInspectorIntegrationEnabled": {"Fn::Equals": ["Enable", {"Ref": "AmazonInspectorIntegration"}]}
     },
     "Resources": {
+        "CloudInsightCredentialsTable": {
+            "Type" : "AWS::DynamoDB::Table",
+            "Properties" : {
+                "TableName": "CloudInsightCredentials",
+                "AttributeDefinitions" : [
+                    {
+                        "AttributeName" : "name",
+                        "AttributeType" : "S"   
+                    },
+                    {
+                        "AttributeName" : "identifier",
+                        "AttributeType" : "S"   
+                    }
+                ],
+                "KeySchema" : [
+                    {
+                        "AttributeName" : "name",
+                        "KeyType" : "HASH"
+                    },
+                    {
+                        "AttributeName" : "identifier",
+                        "KeyType" : "RANGE"
+                    }
+                ],
+                "LocalSecondaryIndexes" :[{
+                    "IndexName" : "myLSI",
+                    "KeySchema" : [
+                        {
+                          "AttributeName" : "name",
+                          "KeyType" : "HASH"
+                        },
+                        {
+                          "AttributeName" : "identifier",
+                          "KeyType" : "RANGE"
+                        }
+                    ],
+                    "Projection" : {
+                        "NonKeyAttributes" : ["secret"],
+                        "ProjectionType" : "INCLUDE"
+                    }
+                }],
+                "ProvisionedThroughput" : {
+                    "ReadCapacityUnits" : "1",
+                    "WriteCapacityUnits" : "1"
+                }
+            }
+        },
+        "CloudInsightCustomChecksKey": {
+            "Type" : "AWS::KMS::Key",
+            "Properties" : {
+                "Description" : "CloudInsight Custom Checks KMS Key.",
+                "Enabled" : true,
+                "KeyPolicy" : {
+                    "Version": "2012-10-17",
+                    "Id": "key-default-1",
+                    "Statement": 
+                    [
+                        {
+                            "Sid": "Allow Configuration function to encrypt Cloud Insight secret",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Join": ["", ["arn:aws:iam::", {"Ref": "AWS::AccountId"}, ":root"]]
+                                }
+                            },
+                            "Action": "kms:*",
+                            "Resource": "*"
+                        },
+                        {
+                            "Sid": "Allow use of the key for decryption.",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::GetAtt": [
+                                        "CustomChecksDriverFunctionRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Decrypt"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Sid": "Allow use of the key for decryption.",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::GetAtt": [
+                                        "CustomChecksLambdaSetupRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Encrypt"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "CloudInsightCustomChecksKeyAlias": {
+            "Type" : "AWS::KMS::Alias",
+            "Properties" : {
+                "AliasName" : {
+                    "Fn::Join": ["", ["alias/", {"Ref": "AWS::StackName"}]]
+                },
+                "TargetKeyId" : {"Ref":"CloudInsightCustomChecksKey"}
+            }
+        },
         "CustomChecksLambdaSetupRole": {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -189,6 +302,27 @@
                         {
                             "Effect": "Allow",
                             "Action": [
+                                "dynamodb:PutItem"
+                            ],
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:aws:dynamodb", 
+                                        ":",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":",
+                                        "table/",
+                                        {"Ref": "CloudInsightCredentialsTable"}
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
                                 "logs:DescribeLogStreams",
                                 "logs:CreateLogGroup",
                                 "logs:CreateLogStream",
@@ -214,6 +348,18 @@
                     ]
                 },
                 "Description": "Function to get AWS Config Service delivery channel information.",
+                "Environment": {
+                    "Variables": {
+                        "TableName": {"Ref": "CloudInsightCredentialsTable"},
+                        "SecretName": "default",
+                        "KeyId": {
+                            "Fn::GetAtt": [
+                                "CloudInsightCustomChecksKey",
+                                "Arn"
+                            ]
+                        }
+                    }
+                },
                 "Code": {
                     "ZipFile": {
                         "Fn::Join": [
@@ -224,18 +370,19 @@
                                     "Ref": "AWS::Region"
                                 },
                                 "',\n",
-                                "    response = require('cfn-response'),\n",
-                                "    AWS = require('aws-sdk');\n",
+                                "   response = require('cfn-response'),\n",
+                                "   AWS = require('aws-sdk');\n",
                                 "exports.handler = function(event, context) {\n",
-                                "    AWS.config.update({region: awsRegion});\n",
-                                "    console.log('REQUEST RECEIVED:\\n', JSON.stringify(event));\n",
-                                "    if (event.RequestType !== 'Create') {\n",
-                                "        return response.send(event, context, response.SUCCESS);\n",
-                                "    }\n",
+                                "   AWS.config.update({region: awsRegion});\n",
+                                "   console.log('REQUEST RECEIVED. RequestType: %s\\n', event.RequestType);\n",
                                 "\n",
-                                "    var responseData = {},\n",
-                                "        deliveryChannel = '',\n",
-                                "        configService = new AWS.ConfigService();\n",
+                                "   if (event.RequestType === 'Delete') {\n",
+                                "       return response.send(event, context, response.SUCCESS, responseData);\n",
+                                "   }\n",
+                                "\n",
+                                "   var responseData = {},\n",
+                                "       deliveryChannel = '',\n",
+                                "       configService = new AWS.ConfigService();\n",
                                 "\n",
                                 "   configService.describeDeliveryChannels({}, function(err, data) {\n",
                                 "       if (err) {\n",
@@ -250,10 +397,52 @@
                                 "           return response.send(event, context, response.FAILED, responseData);\n",
                                 "       }\n",
                                 "       deliveryChannel = data.DeliveryChannels[0];\n",
-                                "       responseData = {'TopicArn': deliveryChannel.snsTopicARN, 'DeliveryChannelName': deliveryChannel.name};\n",
-                                "       return response.send(event, context, response.SUCCESS, responseData);\n",
+                                "       responseData = {\n",
+                                "               'TopicArn': deliveryChannel.snsTopicARN,\n",
+                                "               'DeliveryChannelName': deliveryChannel.name,\n",
+                                "               'BucketName': deliveryChannel.s3BucketName,\n",
+                                "               'KeyPrefix': deliveryChannel.hasOwnProperty('s3KeyPrefix') ? deliveryChannel.s3KeyPrefix : ''\n",
+                                "           };\n",
+                                "       var storeSecretParams = {\n",
+                                "                tableName: process.env.TableName,\n",
+                                "                keyId: process.env.KeyId,\n",
+                                "                name: process.env.SecretName,\n",
+                                "                identifier: event.ResourceProperties.identifier,\n",
+                                "                secret: event.ResourceProperties.secret\n",
+                                "           };\n",
+                                "       return storeSecret(storeSecretParams, function(err) {\n",
+                                "            if (err) {\n",
+                                "                responseData = {Error: 'Failed to store store secret in DDB. Error: ' + JSON.stringify(err)};\n",
+                                "                return response.send(event, context, response.FAILED, responseData);\n",
+                                "            }\n",
+                                "            return response.send(event, context, response.SUCCESS, responseData);\n",
+                                "        });\n",
                                 "   });\n",
-                                "};"
+                                "};",
+                                "\n",
+                                "function storeSecret(params, callback) {\n",
+                                "    var kms = new AWS.KMS({apiVersion: '2014-11-01'}),\n",
+                                "        dynamodb = new AWS.DynamoDB({apiVersion: '2012-08-10'}),\n",
+                                "        kmsParams = {\n",
+                                "            KeyId: params.keyId,\n",
+                                "            Plaintext: params.secret\n",
+                                "        };\n",
+                                "    kms.encrypt(kmsParams, function(err, encryptedData) {\n",
+                                "        if (err) return callback(err);\n",
+                                "        putItemParams = {\n",
+                                "            TableName: params.tableName,\n",
+                                "            Item: {\n",
+                                "                'name': {'S': params.name},\n",
+                                "                'identifier': {'S': params.identifier},\n",
+                                "                'secret': {'S': encryptedData.CiphertextBlob.toString('base64')}\n",
+                                "            }\n",
+                                "        };\n",
+                                "        dynamodb.putItem(putItemParams, function(err, data) {\n",
+                                "            if (err) return callback(err);\n",
+                                "            return callback(null);\n",
+                                "        });\n",
+                                "    });\n",
+                                "}"
                             ]
                         ]
                     }
@@ -265,7 +454,9 @@
         "ConfigSnsTopic": {
             "Type": "Custom::ConfigSnsTopic",
             "Properties": {
-                "ServiceToken": { "Fn::GetAtt" : ["GetConfigServiceData", "Arn"] }
+                "ServiceToken": { "Fn::GetAtt" : ["GetConfigServiceData", "Arn"] },
+                "identifier": { "Ref": "AccessKeyID" },
+                "secret": { "Ref": "SecretKey" }
             }
         },
         "SetupConfigSubscription": {
@@ -378,35 +569,6 @@
                                 "logs:PutLogEvents"
                             ],
                             "Resource": "arn:aws:logs:*:*:*"
-                        }
-                    ]
-                }
-            },
-            "DependsOn": [
-                "CustomChecksWorkerFunctionRole"
-            ]
-        },
-        "ReadCloudConfigPolicy": {
-            "Type": "AWS::IAM::Policy",
-            "Properties": {
-                "PolicyName": "CustomChecksReadCloudConfigPolicy",
-                "Roles": [
-                    {
-                        "Ref": "CustomChecksWorkerFunctionRole"
-                    }
-                ],
-                "PolicyDocument": {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "s3:GetObject",
-                                "s3:GetBucketLocation"
-                            ],
-                            "Resource": [
-                                "*"
-                            ]
                         }
                     ]
                 }
@@ -605,6 +767,27 @@
                         {
                             "Effect": "Allow",
                             "Action": [
+                                "dynamodb:GetItem"
+                            ],
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:aws:dynamodb", 
+                                        ":",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":",
+                                        "table/",
+                                        {"Ref": "CloudInsightCredentialsTable"}
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
                                 "logs:DescribeLogStreams",
                                 "logs:CreateLogGroup",
                                 "logs:CreateLogStream",
@@ -619,7 +802,27 @@
                                 "s3:GetBucketLocation"
                             ],
                             "Resource": [
-                                "*"
+                                {"Fn::Join":
+                                    [
+                                        ":",
+                                        [
+                                            "arn:aws:s3::",
+                                            { "Fn::GetAtt" : ["ConfigSnsTopic", "BucketName"] }
+                                        ]
+                                    ]
+                                },
+                                {"Fn::Join":
+                                    [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            { "Fn::GetAtt" : ["ConfigSnsTopic", "BucketName"] },
+                                            "/",
+                                            { "Fn::GetAtt" : ["ConfigSnsTopic", "KeyPrefix"] },
+                                            "*"
+                                        ]
+                                    ]
+                                }
                             ]
                         }
                     ]
@@ -636,8 +839,15 @@
                 "Description": "Custom Checks Driver function.",
                 "Environment": {
                     "Variables": {
+                        "TableName": {"Ref": "CloudInsightCredentialsTable"},
+                        "SecretName": "default",
+                        "KeyId": {
+                            "Fn::GetAtt": [
+                                "CloudInsightCustomChecksKey",
+                                "Arn"
+                            ]
+                        },
                         "identifier": { "Ref": "AccessKeyID" },
-                        "secret": { "Ref": "SecretKey" },
                         "api_url": { "Fn::FindInMap" : ["ApiUrls", "urls", {"Ref": "CloudInsightPortal"}] },
                         "workerFunctionName": { "Ref": "CreateCustomChecksWorkerFunction" },
                         "checks": {
