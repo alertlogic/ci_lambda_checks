@@ -21,7 +21,8 @@ var fs                = require('fs'),
     deploymentList    = [],
     accountList       = [],
     callback          = function() {},
-    execfile          = require('child_process').execFile;
+    execfile          = require('child_process').execFile,
+    spawn 	      = require('child_process').spawn;
 
 winston.info('Building Lambda checks to ' + deploy);
 
@@ -115,6 +116,7 @@ prompt.get(ciLogin, function (err, result) {
                     winston.info("Logging you in to the Cloud Insight API.");
                     if ( status === "SUCCESS" ) {
                         config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
+			winston.info("Token: " + token);
                         onErr(null, token);
                     } else {
                         onErr(status);
@@ -130,7 +132,7 @@ prompt.get(ciLogin, function (err, result) {
                     if ( status === "SUCCESS" ) {
                         callback(null, token, environments.sources);
                     } else {
-                        callback("Unable to fetch environments.");
+                        callback("Unable to fetch environments. Status " + status);
                     }
                 });
             },
@@ -190,7 +192,9 @@ prompt.get(ciLogin, function (err, result) {
                 var zipped  = '../' + fileName;
                 fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
                 process.chdir('target/ci_lambda_checks');
-                execfile('zip', ['-r', '-X', zipped, './'], function(err, stdout) {
+
+		var proc = spawn('zip', ['-r', '-X', zipped, './']);
+		proc.on("exit", function(exitCode) {
                     process.chdir('../../');
                     var deploymentSpec = {
                         "accountId": config.accountId,
@@ -198,7 +202,16 @@ prompt.get(ciLogin, function (err, result) {
                         "awsAccounts": awsAccounts
                     };
                     setup(deploymentSpec, callback);
-                });
+		});
+
+		proc.stdout.on("data", function(chunk) {
+		    return;
+		});
+
+		proc.stdout.on("end", function() {
+		    return;
+		});
+
             }
         ],
         function (err) {
