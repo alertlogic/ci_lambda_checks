@@ -153,7 +153,7 @@ function processAwsConfigEvent(params, message, callback) {
         }
         if (!isRegionInScope(params.awsRegion, regions)) {
             console.log("'" + params.awsRegion + "' region is not in scope for '" +
-                        params.environmentId + "' environment. Regions in scope are: " + regions);
+                        params.environmentId + "' environment. Regions in scope are: " + JSON.stringify(regions));
             return callback(null);
         }
 
