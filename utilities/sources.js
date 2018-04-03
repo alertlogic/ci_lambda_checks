@@ -5,7 +5,8 @@ var api        = require('./api.js'),
         'service': 'sources',
         'endpoint': 'sources',
         'query': {
-            'source.type': 'environment'
+            'source.type': 'environment',
+            'source.config.collection_type': 'aws'
         }
     };
     api.getAll(token, params, callback);
