@@ -62,9 +62,9 @@ var api               = require('./api.js'),
             'id': environmentId,
             'prefix': 'assets',
             'query': {
-                "asset_types": "region,vpc",
-                "key": "/aws/" + region,
-                "return_types": "vpc",
+                "asset_types": "r:region,v:vpc",
+                "r.key": "/aws/" + region,
+                "return_types": "v",
                 "scope": "true"
             }
         };
