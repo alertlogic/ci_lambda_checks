@@ -6,6 +6,7 @@ var api        = require('./api.js'),
         'endpoint': 'sources',
         'query': {
             'source.type': 'environment',
+            'source.config.collection_method': 'api',
             'source.config.collection_type': 'aws'
         }
     };

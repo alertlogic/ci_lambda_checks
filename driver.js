@@ -450,7 +450,7 @@ function  getSupportedAssetTypes(checks) {
 function isRegionInScope(awsRegion, regions) {
     "use strict";
     for (var i = 0; i < regions.rows; i++) {
-        if (regions.assets[i][0].region_name === awsRegion) {
+        if (regions.assets[i][0].name === awsRegion) {
             return true;
         }
     } 
