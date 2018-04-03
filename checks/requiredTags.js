@@ -1,5 +1,4 @@
-var config            = require('../config.js'),
-    requiredTags      = function(input, callback) {
+var requiredTags      = function(input, callback) {
     "use strict";
     var evidence = [];
     if (input.message.configurationItem.configurationItemStatus === "OK" ||
@@ -7,7 +6,7 @@ var config            = require('../config.js'),
         /*
         * Only evaluate policies applicable to the resource type specified in the event.
         */
-        var policies = config.checks.requiredTags.configuration.policies.filter(function(policy) {
+        var policies = input.config.checks.requiredTags.configuration.policies.filter(function(policy) {
             return policy.resourceTypes.indexOf(input.message.configurationItem.resourceType) >= 0;
         });
 

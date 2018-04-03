@@ -1,11 +1,10 @@
-var config            = require('../config.js'),
-    namingConvention = function(input, callback) {
+var namingConvention = function(input, callback) {
     "use strict";
     var result = {vulnerable: false, evidence: []};
     if (input.message.configurationItem.configurationItemStatus === "OK" ||
         input.message.configurationItem.configurationItemStatus === "ResourceDiscovered") {
         var resourceName = getResourceName(input.message.configurationItem.tags),
-            conventions = config.checks.namingConvention.configuration.conventions;
+            conventions = input.config.checks.namingConvention.configuration.conventions;
 
         if (resourceName == null) {
             console.log("namingConvention: Resource name is empty.");

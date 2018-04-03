@@ -1,0 +1,941 @@
+{
+   "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "A stack that sets up Alert Logic custom checks. You will be billed for the AWS resources used if you create a stack from this template. This template requires setting the \"Create IAM resources\" parameter to True.",
+    "Parameters": {
+        "AccessKeyID": {
+            "Description": "API Access Key ID",
+            "Type": "String",
+            "MinLength": "5"
+        },
+        "SecretKey": {
+            "Description": "API Secret Key",
+            "Type": "String",
+            "NoEcho" : "true",
+            "MinLength": "5"
+        },
+        "CloudInsightPortal": {
+            "Description": "CloudInsight Portal where account was created.",
+            "Type": "String",
+            "Default": "USA",
+            "AllowedValues": ["USA", "UK", "Development"]
+        },
+        "AmazonInspectorIntegration": {
+            "Description": "Enable integration with Amazon Inspector.",
+            "Type": "String",
+            "Default": "Enable",
+            "AllowedValues": ["Enable", "Disable"]
+        },
+        "AWSConfigRulesIntegration": {
+            "Description": "Enabled integration with AWS Config Rules",
+            "Type": "String",
+            "Default": "Enable",
+            "AllowedValues": ["Enable", "Disable"]
+        },
+        "EnableVpcScanning": {
+            "Description": "Enable EC2 instances to be scanned by CloudInsight.",
+            "Type": "String",
+            "Default": "Enable",
+            "AllowedValues": ["Enable", "Disable"]
+        },
+        "RolePrefix": {
+            "Description": "IAM Role Prefix. All IAM Roles created by this CloudFormation template will be prefixed with this value followed by '-' and region name. Leave this field empty if you want to use CloudFormation generated IAM Role names.",
+            "Type": "String"
+        },
+        "CloudInsightCustomChecksLambdaS3BucketNamePrefix": {
+            "Description": "The prefix of the S3 bucket which contains CloudInsight custom checks Lambda package. Note that the name of the bucket must contain a region name suffix. The following is the valid backet name syntax: <bucket_name_prefix>.us-east-1.",
+            "Type": "String",
+            "Default": "alertlogic-public-repo",
+            "MinLength": "5"
+        },
+        "CloudInsightCustomChecksLambdaPackageName": {
+            "Description": "Object name containing Lambda package which implements CloudInsight Custom Checks.",
+            "Type": "String",
+            "Default": "ci_lambda_checks-0.0.9.zip",
+            "MinLength": "5"
+        }
+    },
+    "Metadata": {
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups": [
+               {
+                    "Label": {
+                        "default": "Cloud Insight Configuration"
+                    },
+                    "Parameters": [
+                        "AccessKeyID",
+                        "SecretKey",
+                        "CloudInsightPortal"
+                    ]
+                },
+                {
+                    "Label": {
+                        "default": "Checks:"
+                    }
+                },
+                {
+                    "Label": {
+                        "default": "\tIntegrations with AWS Services"
+                    },
+                    "Parameters": [
+                        "AmazonInspectorIntegration",
+                        "AWSConfigRulesIntegration"
+                    ]
+                },
+                {
+                    "Label": {
+                        "default": "Auto-enabled EC2 Instances Scanning"
+                    },
+                    "Parameters": [
+                        "EnableVpcScanning"
+                    ]
+                },
+                {
+                    "Label": {
+                        "default": "Template Configuration"
+                    },
+                    "Parameters": [
+                        "RolePrefix",
+                        "CloudInsightCustomChecksLambdaS3BucketNamePrefix",
+                        "CloudInsightCustomChecksLambdaPackageName"
+                    ]
+                }
+            ],
+            "ParameterLabels": {
+                "AccessKeyID": {
+                    "default": "Access Key ID"
+                },
+                "SecretKey": {
+                    "default": "Secret Key"
+                },
+                "CloudInsightPortal": {
+                    "default": "Cloud Insight Portal"
+                },
+                "AmazonInspectorIntegration": {
+                    "default": "Amazon Inspector Integration"
+                },
+                "AWSConfigRulesIntegration": {
+                    "default": "AWS Config Rules Integration"
+                },
+                "CloudInsightCustomChecksLambdaS3BucketNamePrefix": {
+                    "default": "CloudInsight Custom Checks Lambda package S3 bucket prefix:"
+                },
+                "CloudInsightCustomChecksLambdaPackageName": {
+                    "default": "CloudInsight Custom Checks package name:"
+                }
+            }
+        }
+    },
+    "Mappings": {
+        "ToBoolean": {
+            "Enable": { "Enable": "true", "Disable": "false"}
+        },
+        "ApiUrls": {
+            "urls": { "USA": "api.cloudinsight.alertlogic.com", "UK": "api.cloudinsight.alertlogic.co.uk", "Development": "api.product.dev.alertlogic.com" }
+        }
+    },
+    "Conditions": {
+        "HasRolePrefix": {"Fn::Not": [{"Fn::Equals": ["", {"Ref": "RolePrefix"}]}]},
+        "IsVpcScanningEnabled": {"Fn::Equals": ["Enable", {"Ref": "EnableVpcScanning"}]},
+        "IsAWSConfigRulesIntegrationEnabled": {"Fn::Equals": ["Enable", {"Ref": "AWSConfigRulesIntegration"}]},
+        "IsAmazonInspectorIntegrationEnabled": {"Fn::Equals": ["Enable", {"Ref": "AmazonInspectorIntegration"}]}
+    },
+    "Resources": {
+        "CloudInsightCredentialsTable": {
+            "Type" : "AWS::DynamoDB::Table",
+            "Properties" : {
+                "TableName": "CloudInsightCredentials",
+                "AttributeDefinitions" : [
+                    {
+                        "AttributeName" : "name",
+                        "AttributeType" : "S"   
+                    },
+                    {
+                        "AttributeName" : "identifier",
+                        "AttributeType" : "S"   
+                    }
+                ],
+                "KeySchema" : [
+                    {
+                        "AttributeName" : "name",
+                        "KeyType" : "HASH"
+                    },
+                    {
+                        "AttributeName" : "identifier",
+                        "KeyType" : "RANGE"
+                    }
+                ],
+                "LocalSecondaryIndexes" :[{
+                    "IndexName" : "myLSI",
+                    "KeySchema" : [
+                        {
+                          "AttributeName" : "name",
+                          "KeyType" : "HASH"
+                        },
+                        {
+                          "AttributeName" : "identifier",
+                          "KeyType" : "RANGE"
+                        }
+                    ],
+                    "Projection" : {
+                        "NonKeyAttributes" : ["secret"],
+                        "ProjectionType" : "INCLUDE"
+                    }
+                }],
+                "ProvisionedThroughput" : {
+                    "ReadCapacityUnits" : "1",
+                    "WriteCapacityUnits" : "1"
+                }
+            }
+        },
+        "CloudInsightCustomChecksKey": {
+            "Type" : "AWS::KMS::Key",
+            "Properties" : {
+                "Description" : "CloudInsight Custom Checks KMS Key.",
+                "Enabled" : true,
+                "KeyPolicy" : {
+                    "Version": "2012-10-17",
+                    "Id": "key-default-1",
+                    "Statement": 
+                    [
+                        {
+                            "Sid": "Allow Configuration function to encrypt Cloud Insight secret",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Join": ["", ["arn:aws:iam::", {"Ref": "AWS::AccountId"}, ":root"]]
+                                }
+                            },
+                            "Action": "kms:*",
+                            "Resource": "*"
+                        },
+                        {
+                            "Sid": "Allow use of the key for decryption.",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::GetAtt": [
+                                        "CustomChecksDriverFunctionRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Decrypt"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Sid": "Allow use of the key for decryption.",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::GetAtt": [
+                                        "CustomChecksLambdaSetupRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Encrypt"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "CloudInsightCustomChecksKeyAlias": {
+            "Type" : "AWS::KMS::Alias",
+            "Properties" : {
+                "AliasName" : {
+                    "Fn::Join": ["", ["alias/", {"Ref": "AWS::StackName"}]]
+                },
+                "TargetKeyId" : {"Ref":"CloudInsightCustomChecksKey"}
+            }
+        },
+        "CustomChecksLambdaSetupRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "RoleName": {
+                    "Fn::If": [
+                        "HasRolePrefix",
+                        {"Fn::Join": ["-", [{"Ref": "RolePrefix"}, {"Ref": "AWS::Region"}, "SetupRole"]]},
+                        {"Ref": "AWS::NoValue"}
+                    ]
+                }
+            }
+        },
+        "CustomChecksLambdaSetupPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CustomChecksLambdaSetupPolicy",
+                "Roles": [
+                    {
+                        "Ref": "CustomChecksLambdaSetupRole"
+                    }
+                ],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "config:DescribeDeliveryChannels",
+                                "config:DeliverConfigSnapshot",
+                                "sns:Subscribe",
+                                "sns:Unsubscribe"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "dynamodb:PutItem"
+                            ],
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:aws:dynamodb", 
+                                        ":",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":",
+                                        "table/",
+                                        {"Ref": "CloudInsightCredentialsTable"}
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:DescribeLogStreams",
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Resource": "arn:aws:logs:*:*:*"
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "CustomChecksLambdaSetupRole"
+            ]
+        },
+        "GetConfigServiceData": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CustomChecksLambdaSetupRole",
+                        "Arn"
+                    ]
+                },
+                "Description": "Function to get AWS Config Service delivery channel information.",
+                "Environment": {
+                    "Variables": {
+                        "TableName": {"Ref": "CloudInsightCredentialsTable"},
+                        "SecretName": "default",
+                        "KeyId": {
+                            "Fn::GetAtt": [
+                                "CloudInsightCustomChecksKey",
+                                "Arn"
+                            ]
+                        }
+                    }
+                },
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "var awsRegion = '",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "',\n",
+                                "   response = require('cfn-response'),\n",
+                                "   AWS = require('aws-sdk');\n",
+                                "exports.handler = function(event, context) {\n",
+                                "   AWS.config.update({region: awsRegion});\n",
+                                "   console.log('REQUEST RECEIVED. RequestType: %s\\n', event.RequestType);\n",
+                                "\n",
+                                "   if (event.RequestType === 'Delete') {\n",
+                                "       return response.send(event, context, response.SUCCESS, responseData);\n",
+                                "   }\n",
+                                "\n",
+                                "   var responseData = {},\n",
+                                "       deliveryChannel = '',\n",
+                                "       configService = new AWS.ConfigService();\n",
+                                "\n",
+                                "   configService.describeDeliveryChannels({}, function(err, data) {\n",
+                                "       if (err) {\n",
+                                "           responseData = {Error: 'DescribeDeliveryChannels call failed'};\n",
+                                "           console.log(responseData.Error + ':\\n', err);\n",
+                                "           return response.send(event, context, response.FAILED, responseData);\n",
+                                "       }\n",
+                                "\n",
+                                "       if (!data.DeliveryChannels.length) {\n",
+                                "           console.log('No Delivery channels found. Setup SNS Subscription manually!');\n",
+                                "           responseData = {Error: 'No Delivery Channels found'};\n",
+                                "           return response.send(event, context, response.FAILED, responseData);\n",
+                                "       }\n",
+                                "       deliveryChannel = data.DeliveryChannels[0];\n",
+                                "       responseData = {\n",
+                                "               'TopicArn': deliveryChannel.snsTopicARN,\n",
+                                "               'DeliveryChannelName': deliveryChannel.name,\n",
+                                "               'BucketName': deliveryChannel.s3BucketName,\n",
+                                "               'KeyPrefix': deliveryChannel.hasOwnProperty('s3KeyPrefix') ? deliveryChannel.s3KeyPrefix : ''\n",
+                                "           };\n",
+                                "       var storeSecretParams = {\n",
+                                "                tableName: process.env.TableName,\n",
+                                "                keyId: process.env.KeyId,\n",
+                                "                name: process.env.SecretName,\n",
+                                "                identifier: event.ResourceProperties.identifier,\n",
+                                "                secret: event.ResourceProperties.secret\n",
+                                "           };\n",
+                                "       return storeSecret(storeSecretParams, function(err) {\n",
+                                "            if (err) {\n",
+                                "                responseData = {Error: 'Failed to store store secret in DDB. Error: ' + JSON.stringify(err)};\n",
+                                "                return response.send(event, context, response.FAILED, responseData);\n",
+                                "            }\n",
+                                "            return response.send(event, context, response.SUCCESS, responseData);\n",
+                                "        });\n",
+                                "   });\n",
+                                "};",
+                                "\n",
+                                "function storeSecret(params, callback) {\n",
+                                "    var kms = new AWS.KMS({apiVersion: '2014-11-01'}),\n",
+                                "        dynamodb = new AWS.DynamoDB({apiVersion: '2012-08-10'}),\n",
+                                "        kmsParams = {\n",
+                                "            KeyId: params.keyId,\n",
+                                "            Plaintext: params.secret\n",
+                                "        };\n",
+                                "    kms.encrypt(kmsParams, function(err, encryptedData) {\n",
+                                "        if (err) return callback(err);\n",
+                                "        putItemParams = {\n",
+                                "            TableName: params.tableName,\n",
+                                "            Item: {\n",
+                                "                'name': {'S': params.name},\n",
+                                "                'identifier': {'S': params.identifier},\n",
+                                "                'secret': {'S': encryptedData.CiphertextBlob.toString('base64')}\n",
+                                "            }\n",
+                                "        };\n",
+                                "        dynamodb.putItem(putItemParams, function(err, data) {\n",
+                                "            if (err) return callback(err);\n",
+                                "            return callback(null);\n",
+                                "        });\n",
+                                "    });\n",
+                                "}"
+                            ]
+                        ]
+                    }
+                },
+                "Runtime": "nodejs4.3",
+                "Timeout": "60"
+            }
+        },
+        "ConfigSnsTopic": {
+            "Type": "Custom::ConfigSnsTopic",
+            "Properties": {
+                "ServiceToken": { "Fn::GetAtt" : ["GetConfigServiceData", "Arn"] },
+                "identifier": { "Ref": "AccessKeyID" },
+                "secret": { "Ref": "SecretKey" }
+            }
+        },
+        "SetupConfigSubscription": {
+            "Type": "AWS::SNS::Subscription",
+            "Properties": {
+                "TopicArn": { "Fn::GetAtt" : ["ConfigSnsTopic", "TopicArn"] },
+                "Protocol": "lambda",
+                "Endpoint": { "Fn::GetAtt" : ["CreateCustomChecksDriverFunction", "Arn"] }
+            }
+        },
+        "DeliverConfigSnapshotFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CustomChecksLambdaSetupRole",
+                        "Arn"
+                    ]
+                },
+                "Description": "Function to get AWS Config Service delivery channel information.",
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "var awsRegion = '",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "',\n",
+                                "    response = require('cfn-response'),\n",
+                                "    AWS = require('aws-sdk');\n",
+                                "exports.handler = function(event, context) {\n",
+                                "    AWS.config.update({region: awsRegion});\n",
+                                "    console.log('REQUEST RECEIVED:\\n', JSON.stringify(event));\n",
+                                "    if (event.RequestType !== 'Create') {\n",
+                                "        return response.send(event, context, response.SUCCESS);\n",
+                                "    }\n",
+                                "    var configService = new AWS.ConfigService();\n",
+                                "    configService.deliverConfigSnapshot({deliveryChannelName: event.ResourceProperties.DeliveryChannelName}, function(err, data) {\n",
+                                "       if (err) {\n",
+                                "           console.log('WARNING: scheduled delivery of the configuration snapshot failed. Error: ' + JSON.stringify(err));\n",
+                                "       } else {\n",
+                                "           console.log('Successfully scheduled delivery of the configuration snapshot.');\n",
+                                "       }\n",
+                                "       return response.send(event, context, response.SUCCESS);\n",
+                                "   })\n",
+                                "};"
+                            ]
+                        ]
+                    }
+                },
+                "Runtime": "nodejs4.3",
+                "Timeout": "60"
+            },
+            "DependsOn": [
+                "LambdaInvokePermission"
+            ]
+        },
+        "DeliverConfigSnapshot": {
+            "Type": "Custom::DeliverConfigSnapshot",
+            "Properties": {
+                "ServiceToken": { "Fn::GetAtt" : ["DeliverConfigSnapshotFunction", "Arn"] },
+                "DeliveryChannelName": { "Fn::GetAtt" : ["ConfigSnsTopic", "DeliveryChannelName"] }
+            }
+        },
+        "CustomChecksWorkerFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "RoleName": {
+                    "Fn::If": [
+                        "HasRolePrefix",
+                        {"Fn::Join": ["-", [{"Ref": "RolePrefix"}, {"Ref": "AWS::Region"}, "WorkerRole"]]},
+                        {"Ref": "AWS::NoValue"}
+                    ]
+                }
+            }
+        },
+        "BasicExecutiontPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CustomChecksExecutionPolicy",
+                "Roles": [
+                    {
+                        "Ref": "CustomChecksWorkerFunctionRole"
+                    }
+                ],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:DescribeLogStreams",
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Resource": "arn:aws:logs:*:*:*"
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "CustomChecksWorkerFunctionRole"
+            ]
+        },
+        "EnableCloudInsightScanning": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CustomChecksEnableCloudInsightPolicy",
+                "Roles": [
+                    {
+                        "Ref": "CustomChecksWorkerFunctionRole"
+                    }
+                ],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "ec2:DescribeInstances",
+                                "ec2:DescribeInstanceAttribute",
+                                "ec2:ModifyInstanceAttribute",
+                                "ec2:DescribeSecurityGroups",
+                                "ec2:CreateSecurityGroup",
+                                "ec2:DeleteSecurityGroup",
+                                "ec2:AuthorizeSecurityGroupIngress",
+                                "ec2:RevokeSecurityGroupIngress",
+                                "ec2:RevokeSecurityGroupEgress",
+                                "ec2:CreateTags",
+                                "ec2:DeleteTags"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "CustomChecksWorkerFunctionRole"
+            ]
+        },
+        "ConfigReadOnlyPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "ConfigReadOnlyPolicy",
+                "Roles": [
+                    {
+                        "Ref": "CustomChecksWorkerFunctionRole"
+                    }
+                ],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "config:Describe*",
+                                "config:Get*",
+                                "config:List*"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "CustomChecksWorkerFunctionRole"
+            ]
+        },
+        "InspectorReadOnlyPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "InspectorReadOnlyPolicy",
+                "Roles": [
+                    {
+                        "Ref": "CustomChecksWorkerFunctionRole"
+                    }
+                ],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "inspector:ListFindings",
+                                "inspector:DescribeFindings",
+                                "inspector:ListAssessmentTemplates",
+                                "inspector:ListAssessmentRuns",
+                                "inspector:DescribeAssessmentRuns",
+                                "inspector:ListAssessmentRunAgents"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "CustomChecksWorkerFunctionRole"
+            ]
+        },
+        "CreateCustomChecksWorkerFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "worker.handler",
+                "Description": "Custom Checks Worker function.",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CustomChecksWorkerFunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Code": {
+                    "S3Bucket": {
+                        "Fn::Join": [
+                            ".",
+                            [
+                                { "Ref": "CloudInsightCustomChecksLambdaS3BucketNamePrefix" },
+                                { "Ref": "AWS::Region" }
+                            ]
+                        ]
+                    },
+                    "S3Key": {
+                        "Fn::Join": [
+                            "/",
+                            [
+                                "lambda_packages",
+                                { "Ref": "CloudInsightCustomChecksLambdaPackageName" }
+                            ]
+                        ]
+                    }
+                },
+                "Runtime": "nodejs4.3",
+                "Timeout": "300"
+            },
+            "DependsOn": [
+                "CustomChecksWorkerFunctionRole"
+            ]
+        },
+        "CustomChecksDriverFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "RoleName": {
+                    "Fn::If": [
+                        "HasRolePrefix",
+                        {"Fn::Join": ["-", [{"Ref": "RolePrefix"}, {"Ref": "AWS::Region"}, "DriverRole"]]},
+                        {"Ref": "AWS::NoValue"}
+                    ]
+                }
+            }
+        },
+        "CustomChecksDriverFunctionPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CustomChecksDriverFunctionPolicy",
+                "Roles": [
+                    {
+                        "Ref": "CustomChecksDriverFunctionRole"
+                    }
+                ],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "lambda:InvokeFunction"
+                            ],
+                            "Resource": {
+                                "Fn::GetAtt": [
+                                    "CreateCustomChecksWorkerFunction",
+                                    "Arn"
+                                ]
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "dynamodb:GetItem"
+                            ],
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:aws:dynamodb", 
+                                        ":",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":",
+                                        "table/",
+                                        {"Ref": "CloudInsightCredentialsTable"}
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:DescribeLogStreams",
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Resource": "arn:aws:logs:*:*:*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetObject",
+                                "s3:GetBucketLocation"
+                            ],
+                            "Resource": [
+                                {"Fn::Join":
+                                    [
+                                        ":",
+                                        [
+                                            "arn:aws:s3::",
+                                            { "Fn::GetAtt" : ["ConfigSnsTopic", "BucketName"] }
+                                        ]
+                                    ]
+                                },
+                                {"Fn::Join":
+                                    [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            { "Fn::GetAtt" : ["ConfigSnsTopic", "BucketName"] },
+                                            "/",
+                                            { "Fn::GetAtt" : ["ConfigSnsTopic", "KeyPrefix"] },
+                                            "*"
+                                        ]
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "CustomChecksDriverFunctionRole"
+            ]
+        },
+        "CreateCustomChecksDriverFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "driver.handler",
+                "Description": "Custom Checks Driver function.",
+                "Environment": {
+                    "Variables": {
+                        "TableName": {"Ref": "CloudInsightCredentialsTable"},
+                        "SecretName": "default",
+                        "KeyId": {
+                            "Fn::GetAtt": [
+                                "CloudInsightCustomChecksKey",
+                                "Arn"
+                            ]
+                        },
+                        "identifier": { "Ref": "AccessKeyID" },
+                        "api_url": { "Fn::FindInMap" : ["ApiUrls", "urls", {"Ref": "CloudInsightPortal"}] },
+                        "workerFunctionName": { "Ref": "CreateCustomChecksWorkerFunction" },
+                        "checks": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Fn::If": [
+                                            "IsVpcScanningEnabled", 
+                                            "enableVpcScanning;",
+                                            ""
+                                        ]
+                                    },
+                                    {
+                                        "Fn::If": [
+                                            "IsAWSConfigRulesIntegrationEnabled", 
+                                            "awsConfigRules;",
+                                            ""
+                                        ]
+                                    },
+                                    {
+                                        "Fn::If": [
+                                            "IsAmazonInspectorIntegrationEnabled", 
+                                            "awsInspector;",
+                                            ""
+                                        ]
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                },
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CustomChecksDriverFunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Code": {
+                    "S3Bucket": {
+                        "Fn::Join": [
+                            ".",
+                            [
+                                { "Ref": "CloudInsightCustomChecksLambdaS3BucketNamePrefix" },
+                                { "Ref": "AWS::Region" }
+                            ]
+                        ]
+                    },
+                    "S3Key": {
+                        "Fn::Join": [
+                            "/",
+                            [
+                                "lambda_packages",
+                                { "Ref": "CloudInsightCustomChecksLambdaPackageName"}
+                            ]
+                        ]
+                    }
+                },
+                "Runtime": "nodejs4.3",
+                "Timeout": "300"
+            },
+            "DependsOn": [
+                "CustomChecksDriverFunctionPolicy"
+            ]
+        },
+        "LambdaInvokePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName" : { "Fn::GetAtt" : ["CreateCustomChecksDriverFunction", "Arn"] },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "sns.amazonaws.com",
+                "SourceArn": {"Fn::GetAtt": ["ConfigSnsTopic", "TopicArn"]}
+            },
+            "DependsOn": [
+                "CreateCustomChecksDriverFunction"
+            ]
+        }
+    },
+    "Outputs": {
+        "AWSConfigNotificationsSubscriptionArn": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "ConfigSnsTopic",
+                    "TopicArn"
+                ]
+            },
+            "Description": "AWS Config Service SNS notifications  subscription ARN."
+        }
+    }
+}
+

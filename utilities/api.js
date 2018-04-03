@@ -39,7 +39,7 @@ var https   = require('https'),
             });
 
         req.on('error', function(e) {
-            console.log('Failed to fetch an item. Params: ' + JSON.stringify(params) + '. Error: ' + e.message);
+            console.log('Failed to fetch an item. Params: ' + JSON.stringify(params, null, 2) + '. Error: ' + JSON.stringify(e, null, 2));
             callback("FAILED", e.message);
         });
         req.end();
@@ -70,16 +70,16 @@ var https   = require('https'),
                 res.on('end', function() {
                     if (res.statusCode === 200) {
                         var json = JSON.parse(responseString);
-                        callback("SUCCESS", json);
+                        return callback("SUCCESS", json);
                     } else {
-                        callback("FAILED", res.statusCode);
+                        return callback("FAILED", res.statusCode);
                     }
                 });
             });
 
         req.on('error', function(e) {
-            console.log('Failed to fetch a set of items. Params: ' + JSON.stringify(params) + '. Error: ' + e.message);
-            callback("FAILED", e.message);
+            console.log('Failed to fetch a set of items. Params: ' + JSON.stringify(params) + '. Error: ' + JSON.stringify(e, null, 2));
+            return callback("FAILED", e.message);
         });
         req.end();
     },

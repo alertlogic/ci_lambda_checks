@@ -29,7 +29,7 @@ var config = {
          */
         "sg": {
             "name": "sg",
-            "enabled": true,
+            "enabled": false,
             "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": [
@@ -59,7 +59,7 @@ var config = {
         },
         "namingConvention": {
             "name": "namingConvention",
-            "enabled": true,
+            "enabled": false,
             "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 /*
@@ -95,7 +95,7 @@ var config = {
         },
         "requiredTags": {
             "name": "requiredTags",
-            "enabled": true,
+            "enabled": false,
             "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance"],
@@ -129,7 +129,7 @@ var config = {
         },
         "enableVpcScanning": {
             "name": "enableVpcScanning",
-            "enabled": true,
+            "enabled": false,
             "mode": ["configurationItem", "snapshotEvent"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::VPC", "AWS::EC2::Instance"]
@@ -137,7 +137,7 @@ var config = {
         },
         "awsConfigRules": {
             "name": "awsConfigRules",
-            "enabled": true,
+            "enabled": false,
             "mode": ["configurationItem", "snapshotEvent", "configRule"],
             "supported": ["us-east-1"],
             "configuration": {
@@ -198,7 +198,7 @@ var config = {
         },
         "awsInspector": {
             "name": "awsInspector",
-            "enabled": true,
+            "enabled": false,
             "mode": ["scheduledEvent", "inspectorEvent"],
             "supported": [
                 'us-east-1',

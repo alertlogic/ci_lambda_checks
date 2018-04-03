@@ -1,7 +1,9 @@
 var BitArray       = require('../utilities/bit_array.js'),
-    config         = require('../config.js'),
+    config,
     sg             = function(input, callback)  {
     "use strict";
+    config = input.config;
+
     var result = {vulnerable: false, evidence: []};
     if (input.message.configurationItem.configurationItemStatus === "OK" ||
         input.message.configurationItem.configurationItemStatus === "ResourceDiscovered") {

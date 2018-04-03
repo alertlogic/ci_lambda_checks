@@ -1,6 +1,5 @@
 var async           = require('async'),
     winston         = require('winston'),
-    config          = require('./config.js'),
     pkg             = require('./package.json'),
     assets          = require('./utilities/assets.js'),
     publishResult   = require('./utilities/publish.js'),
@@ -9,8 +8,13 @@ var async           = require('async'),
 exports.handler = function(args, context) {
     "use strict";
     
+    var config = args.config;
+    config.accountId       = args.accountId;
+    config.environmentId   = args.environmentId;
+
     var params = {
             token: args.token,
+            config: config,
             awsRegion: args.awsRegion,
             vpcs: args.vpcs,
             eventType: args.eventType,
@@ -46,9 +50,6 @@ exports.handler = function(args, context) {
             return context.fail();
     }
 
-    config.accountId       = args.accountId;
-    config.environmentId   = args.environmentId;
-
     params.vpcId = getVpcId(params.eventType, params.resourceType, params.resourceId, params.message);
 
     // Tell checks if the vpc in scope.
@@ -73,7 +74,10 @@ exports.handler = function(args, context) {
 
 function applyChecks(params, resultCallback) {
     "use strict";
+    var config = params.config;
+
     winston.info("Worker [%s:%s]: Applying checks. Params: '%s'", config.accountId, config.environmentId, JSON.stringify(params));
+
     async.each(config.checks, function (check, callback) {
         if (!validateCheck(check, params)) {
             return callback();
@@ -81,7 +85,12 @@ function applyChecks(params, resultCallback) {
 
         try {
             var test = require('./checks/' + check.name.toString() + '.js'),
-                metadata = getMetadata(check.name.toString(), params.awsRegion, params.resourceType, params.resourceId);
+                metadata = getMetadata(
+                                config.environmentId,
+                                check.name.toString(),
+                                params.awsRegion,
+                                params.resourceType,
+                                params.resourceId);
             winston.info("Worker [%s:%s]: Executing '%s' custom check. ResourceType: '%s', ResourceId: '%s'",
                           config.accountId, config.environmentId, check.name.toString(), params.resourceType, params.resourceId);
 
@@ -99,29 +108,30 @@ function applyChecks(params, resultCallback) {
                             async.each(Object.getOwnPropertyNames(result.data), function(assetName, cb) {
                                 console.log('Processing %s asset. ResourceType: %s', assetName, result.data[assetName].resourceType);
                                 var metadata = getMetadata(
+                                    config.environmentId,
                                     check.name.toString(),
                                     params.awsRegion,
                                     result.data[assetName].resourceType,
                                     assetName);
-                                publishResult(params.token, metadata, result.data[assetName].vulnerabilities, cb);
+                                publishResult(params.config, params.token, metadata, result.data[assetName].vulnerabilities, cb);
                             }, function(err) {
                                 callback(null);
                             });
                         } else if (result.hasOwnProperty('vulnerabilities')) {
-                            publishResult(params.token, metadata, result.vulnerabilities, callback);
+                            publishResult(params.config, params.token, metadata, result.vulnerabilities, callback);
                         } else if (result.hasOwnProperty('evidence')) {
                             var vulnerability = check.vulnerability;
                             vulnerability.evidence = JSON.stringify(result.evidence);
-                            publishResult(params.token, metadata, [vulnerability], callback);
+                            publishResult(params.config, params.token, metadata, [vulnerability], callback);
                         } else {
-                            publishResult(params.token, metadata, [check.vulnerability], callback);
+                            publishResult(params.config, params.token, metadata, [check.vulnerability], callback);
                         }
                     } else if (result === true) {
                         // Publish a result against the available metadata
-                        publishResult(params.token, metadata, [check.vulnerability], callback);
+                        publishResult(params.config, params.token, metadata, [check.vulnerability], callback);
                     } else if (params.resourceType.length && params.resourceId.length) {
                         // Clear a result against the available metadata
-                        publishResult(params.token, metadata, [], callback);
+                        publishResult(params.config, params.token, metadata, [], callback);
                     } else {
                         return callback();
                     }
@@ -144,14 +154,14 @@ function applyChecks(params, resultCallback) {
     });
 }
 
-function getMetadata(checkName, awsRegion, resourceType, resourceId) {
+function getMetadata(environmentId, checkName, awsRegion, resourceType, resourceId) {
     "use strict";
     return {
         scanner: "custom",
         scanner_scope: "custom" + checkName.toLowerCase(),
         timestamp: Math.round(+new Date()/1000),
         asset_id: assets.getAssetKey(awsRegion, resourceType, resourceId),
-        environment_id: config.environmentId,
+        environment_id: environmentId,
         scan_policy_snapshot_id: "custom_snapshot_" + checkName + "_v" + pkg.version,
         content_type: "application/json"
     };
@@ -160,6 +170,7 @@ function getMetadata(checkName, awsRegion, resourceType, resourceId) {
 function validateCheck(check, params) {
     "use strict";
 
+    var config = params.config;
     if (check.enabled !== true) {
         winston.info("Worker [%s:%s]: '%s' custom check is disabled",
                      config.accountId, config.environmentId, check.name.toString());
@@ -202,7 +213,7 @@ function getVpcId(eventType, resourceType, resourceId, message) {
         case 'scheduledEvent':
         case 'inspectorEvent':
             break;
-        case 'configRule':
+        default:
             if (!message.hasOwnProperty('configurationItem')) {
                 break;
             }
@@ -225,11 +236,6 @@ function getVpcId(eventType, resourceType, resourceId, message) {
                         }
                     }
                 }
-            }
-            break;
-        default:
-            if (resourceType === "AWS::EC2::VPC") {
-                vpcId = resourceId;
             }
             break;
     }
