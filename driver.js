@@ -91,7 +91,9 @@ exports.handler = function(event, context) {
                     var sourcesAsync = require('async');
                     sourcesAsync.each(rows, function(row, sourcesAsyncCallback) {
                         var source = row.source;
-                        if (!source.config.aws.hasOwnProperty('credential') || !source.config.aws.credential.hasOwnProperty('id')) {
+                        if (!source.config.hasOwnProperty('aws') ||
+                            !source.config.aws.hasOwnProperty('credential') ||
+                            !source.config.aws.credential.hasOwnProperty('id')) {
                             return sourcesAsyncCallback(null);
                         }
 
