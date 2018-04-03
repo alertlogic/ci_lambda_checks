@@ -153,7 +153,7 @@ function processAwsConfigEvent(params, message, callback) {
         }
         if (!isRegionInScope(params.awsRegion, regions)) {
             console.log("'" + params.awsRegion + "' region is not in scope for '" +
-                        config.environmentId + "' environment.");
+                        params.environmentId + "' environment. Regions in scope are: " + regions);
             return callback(null);
         }
 
@@ -450,7 +450,7 @@ function  getSupportedAssetTypes(checks) {
 function isRegionInScope(awsRegion, regions) {
     "use strict";
     for (var i = 0; i < regions.rows; i++) {
-        if (regions.assets[i][0].name === awsRegion) {
+        if (regions.assets[i][0].region_name === awsRegion) {
             return true;
         }
     } 
