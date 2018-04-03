@@ -6,6 +6,7 @@ var fs                = require('fs'),
     mkdirp            = require('mkdirp'),
     path              = require('path'),
     uglifyjs          = require('uglify-js'),
+    _                 = require('lodash')
     prompt            = require('prompt'),
     async             = require('async'),
     AWS               = require('aws-sdk'),
@@ -44,48 +45,229 @@ var source = {
     ]
 };
 
+
+var awsRegions      = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'eu-west-1', 'ap-northeast-1', 'ap-northeast-2', 'ap-southeast-2', 'ap-southeast-1', 'eu-central-1'];
+
+
 /*
  * Create the node_modules directory so that it exists for installation regardless of module definitions for deployment
  */
-mkdirp(deploy + 'node_modules/', function (err) {
-    fs.createReadStream('./package.json').pipe(fs.createWriteStream('./target/ci_lambda_checks/package.json'));
-    execfile('npm', ['install', '--only=production', '--prefix', 'target/ci_lambda_checks'], function(err, stdout) {
-        /*
-         * Execute glob based distribution of source files
-         */
-        for ( var section in source ) {
-            glob.sync(source[section]).forEach(function(item) {
+var argv = require('yargs').argv;
+if (argv._.indexOf("publish") > -1) {
+    return buildAndPublish();
+} else {
+    return build();
+} 
+
+function buildAndPublish() {
+    async.waterfall([
+        npmInstall,
+        makeDistribution,
+        makeZip,
+        publishPackage,
+        updateCFTemplate
+    ],
+    function (err) {
+        return onErr(err)
+    });
+}
+
+function build() {
+    async.waterfall([
+        npmInstall,
+        makeDistribution,
+        makeZip
+    ],
+    function (err) {
+        return onErr(err)
+    });
+}
+
+function npmInstall(callback) {
+    mkdirp(deploy + 'node_modules/', function (err) {
+        if (err) {
+            return callback(err);
+        }
+
+        fs.createReadStream('./package.json').pipe(fs.createWriteStream('./target/ci_lambda_checks/package.json'));
+        execfile('npm', ['install', '--only=production', '--prefix', 'target/ci_lambda_checks'], function(err, stdout) {
+            if (err) {
+                console.log("npm install failed. Error: " + err);
+                return callback(err);
+            } else {
+                return callback(null);
+            }
+        });
+    });
+}
+
+/*
+ * Execute glob based distribution of source files
+ */
+function makeDistribution(callback) {
+    async.each(Object.getOwnPropertyNames(source), function(section, eachCallback) {
+            async.each(glob.sync(source[section]), function(item, filesCallback) {
                 mkdirp(path.dirname(item.replace(base, deploy)), function (err) {
                     if (err) {
-                        return onErr(err);
+                        console.log("mkdirp failed. Error: " + JSON.stringify(err));
+                        return filesCallback(err);
                     } else {
-                        switch (this.section) {
-                            case 'application':
-                                var minified = uglifyjs.minify(item, {mangle: false});
-                                fs.writeFile(item.replace(base, deploy), minified.code.replace('release.version', pkg.version));
-                                break;
-                            default:
-                                fs.createReadStream(item).pipe(fs.createWriteStream(item.replace(base, deploy)));
-                                break;
-                        }
+                        var stream = fs.createReadStream(item).pipe(fs.createWriteStream(item.replace(base, deploy)));
+                        stream.on('finish', function() {
+                            filesCallback(null);
+                        });
                     }
                 }.bind({section: section}));
+            },
+            function(err) {
+                return eachCallback(null);
             });
+        },
+        function(err) {
+            console.log("Finished making distribution.");
+            return callback(null);
+        }
+    );
+}
+
+function makeZip(callback) {
+    var fileName = 'ci_lambda_checks-' + pkg.version + '.zip';
+    var zipped  = '../' + fileName;
+    fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
+    console.log("Compressing: %s, Dir: %s", zipped, process.cwd());
+    execfile('zip', ['-r', '-X', zipped, './'], {maxBuffer: 1024 * 500, cwd: 'target/ci_lambda_checks'}, function(err, stdout) {
+        if (err) {
+            return callback(err);
+        }
+        return callback(null, fileName);
+    });
+}
+
+function publishPackage(fileName, callback) {
+    console.log("Publishing '%s' package to S3", fileName);
+    // Prompt for profile to use to deploy our package to S3
+    var profile = {
+            required: true
+        },
+        bucketPrefix = {
+            description: 'Provide backet name prefix to upload files. The region name will be appended to the name you provide.',
+            required: true,
+            default: 'alertlogic-public-repo'
+        },
+        promptSchema = {properties: {}};
+        params = {
+            s3KeyPrefix: "lambda_packages",
+            fileDir: "../target/",
+            fileName: fileName
+        };
+
+    if (typeof (argv.profile) !== "undefined") { params['profile'] = argv.profile; } 
+    else { promptSchema.properties['profile'] = profile; }
+
+    if (typeof (argv.bucketPrefix) !== "undefined") { params['bucketPrefix'] = argv.bucketPrefix; }
+    else { promptSchema.properties['bucketPrefix'] = bucketPrefix; }
+
+    if (Object.keys(promptSchema.properties).length) {
+        prompt.start();
+        prompt.get(promptSchema, function (err, input) {
+            if (err) { return onErr(err); }
+            return uploadFile(_.merge(params, input), callback);
+        });
+    } else {
+        return uploadFile(params, callback);
+    }
+}
+
+function updateCFTemplate(params, resultCallback) {
+    "use strict";
+    process.chdir(__dirname);
+
+    var jsonTemplateFile = "../configuration/cloudformation/ci_lambda_checks.template";
+    console.log("Updating '" + jsonTemplateFile + "'.");
+    async.waterfall([
+        function(callback) {
+            fs.readFile(jsonTemplateFile, { encoding: 'utf8' }, function (err, data) {
+                if (err) {return callback(err);}
+                // parse and return json to callback
+                var json = JSON.parse(data);
+                return callback(null, json);
+            });
+        },
+        function(template, callback) {
+            var modified = false;
+            if (template.Parameters.CloudInsightCustomChecksLambdaS3BucketNamePrefix.Default !== params.bucketPrefix) {
+                template.Parameters.CloudInsightCustomChecksLambdaS3BucketNamePrefix.Default = params.bucketPrefix;
+                modified = true;
+
+            }
+            if (template.Parameters.CloudInsightCustomChecksLambdaPackageName.Default !== params.fileName) {
+                template.Parameters.CloudInsightCustomChecksLambdaPackageName.Default = params.fileName;
+                modified = true;
+            }
+            return callback(null, modified ? template : null);
+        },
+        function (template, callback) {
+            if (template) {
+                return fs.writeFile(jsonTemplateFile, JSON.stringify(template, null, 4), callback);
+            } else {
+                return callback(null);
+            }
+        }
+    ], function (err) {
+        if (err) {
+            return resultCallback(err);
+        } else {
+            params['fileDir']       = "../configuration/cloudformation/",
+            params['fileName']      = "ci_lambda_checks.template";
+            params['s3KeyPrefix']   = "templates";
+            return uploadFile(params, resultCallback);
         }
     });
-    if (err) {
-        return onErr(err);
-    }
-});
+}
 
-/*
- * Let's fix this to actually use the users credentials to promprt the proper selections using CI.
- * Let's also use aws-sdk to automatically publish the resulting checks to the right region
- */
+function uploadFile(params, callback) {
+    var AWS             = new require('aws-sdk');
+        credentials = new AWS.SharedIniFileCredentials({profile: params.profile});
+        AWS.config.credentials = credentials,
+        s3 = new AWS.S3({'signatureVersion': 'v4'}),
+        fileName = params.fileName, 
+        code = require('fs').readFileSync(
+                                require('path').resolve(
+                                    __dirname,
+                                    params.fileDir + fileName));
 
-/*
- * Update the config.js file with proper information if anything is empty
- */
+    // async.eachSeries(awsRegions, function(region, seriesCallback) {
+    async.each(awsRegions, function(region, seriesCallback) {
+        var bucketName = params.bucketPrefix + "." + region;
+        console.log("Uploading '" + fileName + "' to '" + bucketName + "' bucket.");
+        s3.endpoint = getS3Endpoint(region);
+        var s3Params = {
+                "Bucket": bucketName,
+                "Key": params.s3KeyPrefix + "/" + fileName,
+                "Body": code,
+                "ContentType": "application/binary"
+            };
+        s3.putObject(s3Params, function(err, _result) {
+            if (err) {
+                console.log("Failed to persist '" + fileName + "' object to '" + bucketName +
+                            "' bucket. Error: " + JSON.stringify(err));
+                return seriesCallback(err);
+            } else {
+                // console.log("Successfully persisted '" + fileName + "'.");
+                return seriesCallback(null);
+            }
+        });
+    },
+    function(err) {
+        if (err) {
+            console.log("Upload to S3 failed. Error: " + JSON.stringify(err));
+            return callback(err);
+        } else {
+            return callback(null, params);
+        }
+    });
+}
+
 function onErr(err) {
     if (err !== null) {
         winston.error(err);
@@ -93,156 +275,10 @@ function onErr(err) {
     }
 }
 
-var ciLogin = [
-        {"name": "identifier"},
-        {"name": "secret", "required": true, "hidden": true}
-    ];
-
-winston.info("Please sign in to Cloud Insight so that we can integrate with your environments.");
-prompt.start();
-prompt.get(ciLogin, function (err, result) {
-    if (err) { return onErr(err); }
-    for ( var key in result ) {
-        config[key] = result[key];
-    };
-
-    async.waterfall(
-        [
-            /*
-             * Fetch token or fail
-             */
-            function(onErr) {
-                getToken(function(status, token) {
-                    winston.info("Logging you in to the Cloud Insight API.");
-                    if ( status === "SUCCESS" ) {
-                        config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
-			winston.info("Token: " + token);
-                        onErr(null, token);
-                    } else {
-                        onErr(status);
-                    }
-                });
-            },
-            /*
-             * Get list of available environments
-             */
-            function(token, callback) {
-                sources.getSources(token, function(status, environments) {
-                    winston.info("Getting your environment list.");
-                    if ( status === "SUCCESS" ) {
-                        callback(null, token, environments.sources);
-                    } else {
-                        callback("Unable to fetch environments. Status " + status);
-                    }
-                });
-            },
-            /*
-             * Process source records
-             */
-            function(token, rows, callback) {
-                var count = 0,
-                    awsAccounts = {};
-                async.eachSeries(rows, function(row, sourcesAsyncCallback) {
-                    var source = row.source;
-                    if (!source.config.hasOwnProperty('aws') ||
-                        !source.config.aws.hasOwnProperty('credential') ||
-                        !source.config.aws.credential.hasOwnProperty('id')) {
-                        return sourcesAsyncCallback();
-                    }
-                    sources.getCredential(token, source.config.aws.credential.id, function(status, credential) {
-                        if (!credential.credential.hasOwnProperty('iam_role')) {
-                            return sourcesAsyncCallback();
-                        }
-
-                        var environmentId   = source.id,
-                            awsAccountId    = credential.credential.iam_role.arn.split(":")[4],
-                            awsRegions         = [];
-                        // Get regions in scope for the environment
-                        if (!awsAccounts.hasOwnProperty(awsAccountId)) {
-                            awsAccounts[awsAccountId] = {"regions": []};
-                        } else {
-                            awsRegions = awsAccounts[awsAccountId].regions;
-                        }
-                        assets.getRegionsInScope(token, source.id, function(status, regions) {
-                            if (status !== "SUCCESS") {return sourcesAsyncCallback(status);}
-                            for (var region in regions.assets) {
-                                var target = regions.assets[region][0].name;
-                                if (awsRegions.indexOf(target) < 0) {
-                                    awsRegions.push(target);
-                                }
-                            }
-                            awsAccounts[awsAccountId].regions = awsRegions;
-                            return sourcesAsyncCallback();
-                        });
-                    });
-                },
-                function(err) {
-                    if (err) {
-                        winston.error("Failed to discover protected regions. Error: " + JSON.stringify(err));
-                        return callback(err);
-                    } else {
-                        winston.info("Successfully discovered protected regions.");
-                        return callback(null, awsAccounts);
-                    }
-                });
-            },
-            function(awsAccounts, callback) {
-                promptForProfileNew(awsAccounts, callback);
-            },
-            function(awsAccounts, callback) {
-                var fileName = 'ci_lambda_checks-' + config.accountId + '-' + pkg.version + '.zip';
-                var zipped  = '../' + fileName;
-                fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
-                process.chdir('target/ci_lambda_checks');
-
-		var proc = spawn('zip', ['-r', '-X', zipped, './']);
-		proc.on("exit", function(exitCode) {
-                    process.chdir('../../');
-                    var deploymentSpec = {
-                        "accountId": config.accountId,
-                        "file": fileName,
-                        "awsAccounts": awsAccounts
-                    };
-                    setup(deploymentSpec, callback);
-		});
-
-		proc.stdout.on("data", function(chunk) {
-		    return;
-		});
-
-		proc.stdout.on("end", function() {
-		    return;
-		});
-
-            }
-        ],
-        function (err) {
-            if (err) {
-                winston.error("Build failed. Error: " + JSON.stringify(err));
-            }
-            callback(err);
-        }
-    );
-});
-
-function promptForProfileNew(awsAccounts, callback) {
+function getS3Endpoint(region) {
     "use strict";
-    var schema = {
-        "properties": {}
-    };
-    Object.getOwnPropertyNames(awsAccounts).forEach(function(awsAccountId, idx, array) {
-        schema.properties[awsAccountId] = {
-            "required": true,
-            "message": "Please provide the name of the AWS profile for AWS Account: '" + awsAccountId + "'"
-        };
-    });
-
-    prompt.start();
-    prompt.get(schema, function (err, result) {
-        if (err) { return onErr(err); }
-        Object.getOwnPropertyNames(awsAccounts).forEach(function(awsAccountId, idx, array) {
-            awsAccounts[awsAccountId]["profile"] = result[awsAccountId];
-        });
-        return callback(null, awsAccounts);
-    });
+    if (!region || region === 'us-east-1' || region === '') {
+            return 's3.amazonaws.com';
+    }
+    return 's3-' + region + '.amazonaws.com';
 }

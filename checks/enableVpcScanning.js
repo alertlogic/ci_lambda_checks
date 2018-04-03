@@ -1,18 +1,21 @@
-var config                  = require('../config.js'),
-    AWS                     = require('aws-sdk'),
+var AWS                     = require('aws-sdk'),
     async                   = require('async'),
     alSecurityApplianceName = "AlertLogic Security Appliance",
     alProtectionGroupName   = "Alert Logic Security Protection Group",
     checkName               = "enableVpcScanning",
-    debug                   = true;
+    debug                   = true,
+    config;
 
 var enableVpcScanning   = function(params, callback) {
     "use strict";
-    reportStatus("enableVpcScanning called");
+
+    config = params.config;
     if (!validateParamaters(params)) {
         reportError("enableVpcScanning input parameters invalid. Params: " + JSON.stringify(params));
         return callback(null, false);
     }
+    reportStatus("enableVpcScanning called. Params: " + JSON.stringify(params));
+
     if (params.message.configurationItem.configurationItemStatus === "OK" ||
         params.message.configurationItem.configurationItemStatus === "ResourceDiscovered" ||
         params.message.configurationItem.configurationItemStatus === "ResourceDeleted") {

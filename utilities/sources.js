@@ -5,9 +5,10 @@ var api        = require('./api.js'),
         'service': 'sources',
         'endpoint': 'sources',
         'query': {
-            'source.type': 'environment',
+            'source.config.collection_type': 'aws',
             'source.config.collection_method': 'api',
-            'source.config.collection_type': 'aws'
+            'source.config.aws.defender_support': '!true',
+            'source.type': 'environment'
         }
     };
     api.getAll(token, params, callback);

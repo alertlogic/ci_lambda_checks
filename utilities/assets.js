@@ -38,11 +38,12 @@ var api               = require('./api.js'),
         }
     },
 
-    getRegionsInScope = function(token, environmentId, callback) {
+    getRegionsInScope = function(token, accountId, environmentId, callback) {
         "use strict";
         var params = {
             'service': 'assets',
             'endpoint': 'environments',
+            'accountId': accountId,
             'id': environmentId,
             'prefix': 'assets',
             'query': {
@@ -51,14 +52,14 @@ var api               = require('./api.js'),
             }
         };
         api.getMany(token, params, callback);
-        //api.getMany(token, 'assets', 'environments', environmentId, query, callback);
     },
 
-    getVpcsInScope = function(token, environmentId, region, callback) {
+    getVpcsInScope = function(token, accountId, environmentId, region, callback) {
         "use strict";
         var params = {
             'service': 'assets',
             'endpoint': 'environments',
+            'accountId': accountId,
             'id': environmentId,
             'prefix': 'assets',
             'query': {
