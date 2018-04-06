@@ -48,11 +48,16 @@ Currently this project enables integrations with 'Amazon Inspector', 'AWS Config
  US West (N. California)  | us-west-1        | https://s3-us-west-1.amazonaws.com/alertlogic-public-repo.us-west-1/templates/ci_lambda_checks.template
  US West (Oregon)         | us-west-2        | https://s3-us-west-2.amazonaws.com/alertlogic-public-repo.us-west-2/templates/ci_lambda_checks.template
  EU (Ireland)             | eu-west-1        | https://s3-eu-west-1.amazonaws.com/alertlogic-public-repo.eu-west-1/templates/ci_lambda_checks.template
+ EU (London)              | eu-west-2        | https://s3-eu-west-1.amazonaws.com/alertlogic-public-repo.eu-west-2/templates/ci_lambda_checks.template
+ EU (Paris)               | eu-west-3        | https://s3-eu-west-1.amazonaws.com/alertlogic-public-repo.eu-west-3/templates/ci_lambda_checks.template
  EU (Frankfurt)           | eu-central-1     | https://s3-eu-central-1.amazonaws.com/alertlogic-public-repo.eu-central-1/templates/ci_lambda_checks.template
  Asia Pacific (Tokyo)     | ap-northeast-1   | https://s3-ap-northeast-1.amazonaws.com/alertlogic-public-repo.ap-northeast-1/templates/ci_lambda_checks.template
  Asia Pacific (Seoul)     | ap-northeast-2   | https://s3-ap-northeast-2.amazonaws.com/alertlogic-public-repo.ap-northeast-2/templates/ci_lambda_checks.template
+ Asia Pacific (Mumbai)    | ap-south-1       | https://s3-ap-northeast-2.amazonaws.com/alertlogic-public-repo.ap-south-1/templates/ci_lambda_checks.template
  Asia Pacific (Singapore) | ap-southeast-1   | https://s3-ap-southeast-1.amazonaws.com/alertlogic-public-repo.ap-southeast-1/templates/ci_lambda_checks.template
  Asia Pacific (Sydney)    | ap-southeast-2   | https://s3-ap-southeast-2.amazonaws.com/alertlogic-public-repo.ap-southeast-2/templates/ci_lambda_checks.template
+ Canada (Central)         | ca-central-1     | https://s3-ap-southeast-2.amazonaws.com/alertlogic-public-repo.ca-central-1/templates/ci_lambda_checks.template
+ South America (Sao Paulo)| sa-east-1        | https://s3-ap-southeast-2.amazonaws.com/alertlogic-public-repo.sa-east-1/templates/ci_lambda_checks.template
 
 ### Mac OS X  Installation Requirements
 *~ You must install XCode and accept the licensing agreement before you continue with this document ~*  
