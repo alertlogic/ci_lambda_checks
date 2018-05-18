@@ -447,7 +447,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs4.3",
+                "Runtime": "nodejs6.10",
                 "Timeout": "60"
             }
         },
@@ -510,7 +510,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs4.3",
+                "Runtime": "nodejs6.10",
                 "Timeout": "60"
             },
             "DependsOn": [
@@ -709,7 +709,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs4.3",
+                "Runtime": "nodejs6.10",
                 "Timeout": "300"
             },
             "DependsOn": [
@@ -906,7 +906,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs4.3",
+                "Runtime": "nodejs6.10",
                 "Timeout": "300"
             },
             "DependsOn": [
