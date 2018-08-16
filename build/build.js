@@ -22,7 +22,8 @@ var fs                = require('fs'),
     deploymentList    = [],
     accountList       = [],
     callback          = function() {},
-    execfile          = require('child_process').execFile;
+    execfile          = require('child_process').execFile,
+    spawn 	      = require('child_process').spawn;
 
 winston.info('Building Lambda checks to ' + deploy);
 
@@ -197,6 +198,7 @@ function updateCFTemplate(params, resultCallback) {
             if (template.Parameters.CloudInsightCustomChecksLambdaS3BucketNamePrefix.Default !== params.bucketPrefix) {
                 template.Parameters.CloudInsightCustomChecksLambdaS3BucketNamePrefix.Default = params.bucketPrefix;
                 modified = true;
+
             }
             if (template.Parameters.CloudInsightCustomChecksLambdaPackageName.Default !== params.fileName) {
                 template.Parameters.CloudInsightCustomChecksLambdaPackageName.Default = params.fileName;
