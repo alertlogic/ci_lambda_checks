@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "aws-sdk": "^2.2.9",
-    "glob": "3.1.21",
+    "glob": "^7.0.3",
     "glob-all": "3.0.1",
     "jasmine-node": "^1.14.5",
     "jshint": "^2.8.0",
@@ -43,7 +43,7 @@
     "mkdirp": "^0.5.1",
     "ncp": "^2.0.0",
     "node-zip": "^1.1.1",
-    "onchange": "^1.1.0",
+    "onchange": "^2.4.0",
     "parallelshell": "^1.2.0",
     "process": "^0.11.1",
     "prompt": "^0.2.14",
