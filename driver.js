@@ -43,10 +43,14 @@ exports.handler = function(event, context) {
             data['awsRegion'] = topicArn[3];
         }
     }
+    if (data['awsAccountId'] === null) {
+        return context.succeed();
+    }
 
     // Create global config
     console.log("Checks: %s, config: %s", process.env.checks, JSON.stringify(getChecksFromEnvironment(process.env.checks)));
     var deploymentConfig = {
+            'accountId': process.env.accountId,
             'api_url': process.env.api_url,
             'checks': getChecksFromEnvironment(process.env.checks)
         };
@@ -83,7 +87,7 @@ exports.handler = function(event, context) {
                 },
                 function processMyAccountSources(rows, callback) {
                     console.log("Getting environments for '" + data.awsAccountId +
-                                 "'. Number of active environments: '" + rows.length + "'.");
+                                 "' AWS Account. Number of active environments: '" + rows.length + "'.");
                     var deletedEnvironmentId = getDeletedAlertLogicAppliance(config.accountId, data.message);
                     if (deletedEnvironmentId) {
                         /*

@@ -25,6 +25,8 @@ var fs                = require('fs'),
     execfile          = require('child_process').execFile,
     spawn 	      = require('child_process').spawn;
 
+const TEN_MEGA_BYTE = 1024 * 1024 * 10;
+
 winston.info('Building Lambda checks to ' + deploy);
 
 /*
@@ -135,7 +137,7 @@ function makeZip(callback) {
     var zipped  = '../' + fileName;
     fs.writeFileSync(deploy + 'config.js', 'var config = ' + JSON.stringify(config) + ';\nmodule.exports = config;');
     console.log("Compressing: %s, Dir: %s", zipped, process.cwd());
-    execfile('zip', ['-r', '-X', zipped, './'], {maxBuffer: 1024 * 500, cwd: 'target/ci_lambda_checks'}, function(err, stdout) {
+    execfile('zip', ['-r', '-X', zipped, './'], {maxBuffer: TEN_MEGA_BYTE, cwd: 'target/ci_lambda_checks'}, function(err, stdout) {
         if (err) {
             return callback(err);
         }
