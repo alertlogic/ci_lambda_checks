@@ -36,7 +36,7 @@ exports.handler = function(event, context) {
             data['awsRegion'] = arn[3];
             data['message'] = message;
         } else {
-            var subject = record.Sns.Subject;
+            var topicArn = record.Sns.TopicArn.split(':');
             data['record'] = record;
             data['message'] = message;
             data['awsAccountId'] = topicArn[4];
@@ -495,18 +495,6 @@ function isRegionInScope(awsRegion, regions) {
         }
     }
     return false;
-}
-
-function getAccountIdFromSubject(subject) {
-    "use strict";
-    var res = subject.match(/Account (\d{12})$/);
-    return res ? res[1] : null;
-}
-
-function getAwsRegionFromSubject(subject) {
-    "use strict";
-    var res = subject.match(/^\[AWS Config:(.*?)\]/);
-    return res ? res[1] : null;
 }
 
 function getS3Endpoint(region) {
