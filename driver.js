@@ -43,10 +43,14 @@ exports.handler = function(event, context) {
             data['awsRegion'] = getAwsRegionFromSubject(subject);
         }
     }
+    if (data['awsAccountId'] === null) {
+        return context.succeed();
+    }
 
     // Create global config
     console.log("Checks: %s, config: %s", process.env.checks, JSON.stringify(getChecksFromEnvironment(process.env.checks)));
     var deploymentConfig = {
+            'accountId': process.env.accountId,
             'api_url': process.env.api_url,
             'checks': getChecksFromEnvironment(process.env.checks)
         };
@@ -83,7 +87,7 @@ exports.handler = function(event, context) {
                 },
                 function processMyAccountSources(rows, callback) {
                     console.log("Getting environments for '" + data.awsAccountId +
-                                 "'. Number of active environments: '" + rows.length + "'.");
+                                 "' AWS Account. Number of active environments: '" + rows.length + "'.");
                     var deletedEnvironmentId = getDeletedAlertLogicAppliance(config.accountId, data.message);
                     if (deletedEnvironmentId) {
                         /*
@@ -495,12 +499,14 @@ function isRegionInScope(awsRegion, regions) {
 
 function getAccountIdFromSubject(subject) {
     "use strict";
-    return subject.match(/Account (\d{12})$/)[1];
+    var res = subject.match(/Account (\d{12})$/);
+    return res ? res[1] : null;
 }
 
 function getAwsRegionFromSubject(subject) {
     "use strict";
-    return subject.match(/^\[AWS Config:(.*?)\]/)[1];
+    var res = subject.match(/^\[AWS Config:(.*?)\]/);
+    return res ? res[1] : null;
 }
 
 function getS3Endpoint(region) {

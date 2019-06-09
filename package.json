@@ -18,7 +18,7 @@
     "type": "git",
     "url": "git@github.com:alertlogic/ci_lambda_checks.git"
   },
-  "version": "0.0.9",
+  "version": "0.0.10",
   "license": "MIT",
   "engines": {
     "node": "0.12.7"
@@ -26,6 +26,7 @@
   "dependencies": {
     "async": "^1.4.2",
     "lodash": "^4.17.2",
+    "npm": "^6.9.0",
     "winston": "^1.1.2",
     "winston-cloudwatch": "^0.6.1"
   },
