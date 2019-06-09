@@ -141,7 +141,7 @@ function getRole(setupData, roleName, assumeRoleService, callback) {
 function addRolePolicies(setupData, roleName, policies, resultCallback) { 
     "use strict";
     var AWS     = setupData.aws,
-        iam     = new AWS.IAM({apiVersion: '2010-05-08'}),
+        iam     = new AWS.IAM({apiVersion: '2010-05-08', maxRetries: 13, retryDelayOptions: {base: 200}}),
         logger  = setupData.logger;
 
     async.forEachOf(policies, function(policy, index, callback) {

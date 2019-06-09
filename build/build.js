@@ -22,7 +22,8 @@ var fs                = require('fs'),
     deploymentList    = [],
     accountList       = [],
     callback          = function() {},
-    execfile          = require('child_process').execFile;
+    execfile          = require('child_process').execFile,
+    spawn 	      = require('child_process').spawn;
 
 const TEN_MEGA_BYTE = 1024 * 1024 * 10;
 
@@ -199,6 +200,7 @@ function updateCFTemplate(params, resultCallback) {
             if (template.Parameters.CloudInsightCustomChecksLambdaS3BucketNamePrefix.Default !== params.bucketPrefix) {
                 template.Parameters.CloudInsightCustomChecksLambdaS3BucketNamePrefix.Default = params.bucketPrefix;
                 modified = true;
+
             }
             if (template.Parameters.CloudInsightCustomChecksLambdaPackageName.Default !== params.fileName) {
                 template.Parameters.CloudInsightCustomChecksLambdaPackageName.Default = params.fileName;
