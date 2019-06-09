@@ -39,8 +39,8 @@ exports.handler = function(event, context) {
             var subject = record.Sns.Subject;
             data['record'] = record;
             data['message'] = message;
-            data['awsAccountId'] = getAccountIdFromSubject(subject);
-            data['awsRegion'] = getAwsRegionFromSubject(subject);
+            data['awsAccountId'] = topicArn[4];
+            data['awsRegion'] = topicArn[3];
         }
     }
     if (data['awsAccountId'] === null) {

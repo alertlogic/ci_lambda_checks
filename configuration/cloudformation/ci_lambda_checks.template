@@ -2,10 +2,10 @@
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "A stack that sets up Alert Logic custom checks. You will be billed for the AWS resources used if you create a stack from this template. This template requires setting the \"Create IAM resources\" parameter to True.",
     "Parameters": {
-	"AccountID: {
+	"AccountID": {
             "Description": "Alert Logic Account ID",
             "Type": "String"
-	}
+	},
         "AccessKeyID": {
             "Description": "API Access Key ID",
             "Type": "String",
@@ -1040,7 +1040,7 @@
                                 "Arn"
                             ]
                         },
-			"accountId: {
+			"accountId": {
 			    "Ref": "AccountID"
 			},
                         "identifier": {
