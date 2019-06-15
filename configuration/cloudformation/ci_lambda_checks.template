@@ -58,6 +58,14 @@
             "Description": "IAM Role Prefix. All IAM Roles created by this CloudFormation template will be prefixed with this value followed by '-' and region name. Leave this field empty if you want to use CloudFormation generated IAM Role names.",
             "Type": "String"
         },
+        "S3AccessRoleARN": {
+            "Description": "Cross-Account IAM Role allowing access to S3 buckets where AWS Config snapshots are stored.",
+            "Type": "String"
+        },
+        "S3AccessRoleExternalId": {
+            "Description": "External ID specified for Cross-Account IAM Role",
+            "Type": "String"
+        },
         "CloudInsightCustomChecksLambdaS3BucketNamePrefix": {
             "Description": "The prefix of the S3 bucket which contains CloudInsight custom checks Lambda package. Note that the name of the bucket must contain a region name suffix. The following is the valid backet name syntax: <bucket_name_prefix>.us-east-1.",
             "Type": "String",
@@ -114,7 +122,9 @@
                     "Parameters": [
                         "RolePrefix",
                         "CloudInsightCustomChecksLambdaS3BucketNamePrefix",
-                        "CloudInsightCustomChecksLambdaPackageName"
+                        "CloudInsightCustomChecksLambdaPackageName",
+                        "S3AccessRoleARN",
+                        "S3AccessRoleExternalId"
                     ]
                 }
             ],
@@ -142,6 +152,12 @@
                 },
                 "CloudInsightCustomChecksLambdaPackageName": {
                     "default": "CloudInsight Custom Checks package name:"
+                },
+                "S3AccessRoleARN": {
+                    "default": "S3 Access Role ARN:"
+                },
+                "S3AccessRoleExternalId": {
+                    "default": "S3 Access Role External Id:"
                 }
             }
         }
@@ -1015,6 +1031,11 @@
                                     ]
                                 }
                             ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRole",
+                            "Resource": "*"
                         }
                     ]
                 }
@@ -1040,9 +1061,9 @@
                                 "Arn"
                             ]
                         },
-			"accountId": {
-			    "Ref": "AccountID"
-			},
+                        "accountId": {
+                            "Ref": "AccountID"
+                        },
                         "identifier": {
                             "Ref": "AccessKeyID"
                         },
@@ -1085,6 +1106,12 @@
                                     }
                                 ]
                             ]
+                        },
+                        "s3accessRole": {
+                            "Ref": "S3AccessRoleARN"
+                        },
+                        "s3accessRoleExternalId": {
+                            "Ref": "S3AccessRoleExternalId"
                         }
                     }
                 },
