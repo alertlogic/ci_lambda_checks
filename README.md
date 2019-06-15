@@ -59,6 +59,63 @@ Currently this project enables integrations with 'Amazon Inspector', 'AWS Config
  Canada (Central)         | ca-central-1     | https://s3-ca-central-1.amazonaws.com/alertlogic-public-repo.ca-central-1/templates/ci_lambda_checks.template
  South America (Sao Paulo)| sa-east-1        | https://s3-sa-east-1.amazonaws.com/alertlogic-public-repo.sa-east-1/templates/ci_lambda_checks.template
 
+#### Support for AWS Config snapshots stored in a different AWS account
+```ci_lambda_checks``` is able to read AWS Config snapshots stored in an S3 bucket belonging to a different AWS account.
+Account A: AWS Account where ```ci_lambda_checks``` lambda is installed
+Account B: AWS Account where AWS Congig snapshots are stored
+
+1. Create a Cross-Account IAM Role in Account A to to allow Account B access
+	1.1. Use the following policy (replace ```config-bucket``` with your bucket's name)
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetBucketLocation",
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::config-bucket",
+                "arn:aws:s3:::config-bucket/*"
+            ]
+        }
+    ]
+}
+```
+	1.2. Record Role's ARN and ExternalId you specified during role's creation
+
+2. Update S3 bucket policy that stores AWS Config snapshorts to include the following statements (replace ```config-bucket``` with your bucket's name):
+```
+{
+            "Sid": "AllowReadingConfigObjects",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "ROLE ARN FROM STEP 1"
+            },
+            "Action": [
+                "s3:GetObject",
+            ],
+            "Resource": "arn:aws:s3:::config-bucket/*"
+        },
+        {
+            "Sid": "AllowGettingBucketLocation",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "ROLE ARN FROM STEP 1"
+            },
+            "Action": [
+                "s3:GetBucketLocation"
+            ],
+            "Resource": "arn:aws:s3:::config-bucket"
+        }
+```
+
+3. When installing ```ci_lambda_checks``` specify the following parameters:
+	3.1. S3AccessRoleARN - This is the ROLE ARN created in step 1
+	3.2. S3AccessRoleExternalId - This is the ExternalId you specified during creation of the Cross-Account role in step 1.
+
 ### Mac OS X  Installation Requirements
 *~ You must install XCode and accept the licensing agreement before you continue with this document ~*  
 

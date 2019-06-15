@@ -275,8 +275,35 @@ function processAwsConfigEvent(params, message, callback) {
 function processSnapshot(args, message, resultCallback) {
     "use strict";
     async.waterfall([
-        function bucketLocation(callback) {
-            var s3 = new AWS.S3({apiVersion: '2006-03-01'});
+        function getS3AccessCredentials(callback) {
+            if (process.env.s3accessRole) {
+                var sts = new AWS.STS(),
+                    params = {
+                        RoleArn: process.env.s3accessRole,
+                        RoleSessionName: 'CustomChecksDriverFunction',
+                        ExternalId: process.env.s3accessRoleExternalId,
+                        DurationSeconds: 3600
+                    };
+                sts.assumeRole(params, function(err, data) {
+                    if (err) {
+                        console.error("Failed to assume '%s' role while trying to access AWS Config snapshot. Error: %s",
+                                      process.env.s3accessRole, JSON.stringify(err));
+                        callback(err);
+                    } else {
+                        console.log("AssumeRole returned: %s", JSON.stringify(data));
+                        callback(null, new AWS.Credentials(
+                                                    data.Credentials.AccessKeyId,
+                                                    data.Credentials.SecretAccessKey,
+                                                    data.Credentials.SessionToken));
+                    }
+                });
+            } else {
+                // Using current credentials
+                return callback(null, null);
+            }
+        },
+        function bucketLocation(s3credentials, callback) {
+            var s3 = new AWS.S3({apiVersion: '2006-03-01', credentials: s3credentials});
             s3.getBucketLocation({Bucket: message.s3Bucket}, function(err, data) {
                 if (err) {
                     console.error("Failed to get bucket '%s' location while processing snapshot. Error: %s",
@@ -285,7 +312,7 @@ function processSnapshot(args, message, resultCallback) {
                 } else {
                     var bucketLocation  = data.LocationConstraint;
                     console.log("Snapshot bucket location: %s", bucketLocation);
-                    callback(null, new AWS.S3({endpoint: getS3Endpoint(bucketLocation), apiVersion: '2006-03-01'}));
+                    callback(null, new AWS.S3({endpoint: getS3Endpoint(bucketLocation), apiVersion: '2006-03-01', credentials: s3credentials}));
                 }
             });
         },
