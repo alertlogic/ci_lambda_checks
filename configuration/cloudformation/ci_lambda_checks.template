@@ -48,11 +48,15 @@
         "EnableVpcScanning": {
             "Description": "Enable EC2 instances to be scanned by CloudInsight.",
             "Type": "String",
-            "Default": "Enable",
+            "Default": "Disable",
             "AllowedValues": [
                 "Enable",
                 "Disable"
             ]
+        },
+        "FunctionsPrefix": {
+            "Description": "Generated Lambda Functions Prefix. All Lambda Functions created by this CloudFormation template will be prefixed with this value followed by '-' and function name. Leave this field empty if you want to use CloudFormation generated Lambda Functions names.",
+            "Type": "String"
         },
         "RolePrefix": {
             "Description": "IAM Role Prefix. All IAM Roles created by this CloudFormation template will be prefixed with this value followed by '-' and region name. Leave this field empty if you want to use CloudFormation generated IAM Role names.",
@@ -75,7 +79,7 @@
         "CloudInsightCustomChecksLambdaPackageName": {
             "Description": "Object name containing Lambda package which implements CloudInsight Custom Checks.",
             "Type": "String",
-            "Default": "ci_lambda_checks-0.0.10.zip",
+            "Default": "ci_lambda_checks-0.0.11.zip",
             "MinLength": "5"
         }
     },
@@ -120,6 +124,7 @@
                         "default": "Template Configuration"
                     },
                     "Parameters": [
+                        "FunctionsPrefix",
                         "RolePrefix",
                         "CloudInsightCustomChecksLambdaS3BucketNamePrefix",
                         "CloudInsightCustomChecksLambdaPackageName",
@@ -178,6 +183,18 @@
         }
     },
     "Conditions": {
+        "HasFunctionsPrefix": {
+            "Fn::Not": [
+                {
+                    "Fn::Equals": [
+                        "",
+                        {
+                            "Ref": "FunctionsPrefix"
+                        }
+                    ]
+                }
+            ]
+        },
         "HasRolePrefix": {
             "Fn::Not": [
                 {
@@ -185,6 +202,18 @@
                         "",
                         {
                             "Ref": "RolePrefix"
+                        }
+                    ]
+                }
+            ]
+        },
+        "HasS3AccessRoleARN": {
+            "Fn::Not": [
+                {
+                    "Fn::Equals": [
+                        "",
+                        {
+                            "Ref": "S3AccessRoleARN"
                         }
                     ]
                 }
@@ -438,16 +467,6 @@
                                     ]
                                 ]
                             }
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "logs:DescribeLogStreams",
-                                "logs:CreateLogGroup",
-                                "logs:CreateLogStream",
-                                "logs:PutLogEvents"
-                            ],
-                            "Resource": "arn:aws:logs:*:*:*"
                         }
                     ]
                 }
@@ -459,6 +478,25 @@
         "GetConfigServiceData": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
+                "FunctionName": {
+                    "Fn::If": [
+                        "HasFunctionsPrefix",
+                        {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Ref": "FunctionsPrefix"
+                                    },
+                                    "GetConfigServiceData"
+                                ]
+                            ]
+                        },
+                        {
+                            "Ref": "AWS::NoValue"
+                        }
+                    ]
+                },
                 "Handler": "index.handler",
                 "Role": {
                     "Fn::GetAtt": [
@@ -610,6 +648,25 @@
         "DeliverConfigSnapshotFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
+                "FunctionName": {
+                    "Fn::If": [
+                        "HasFunctionsPrefix",
+                        {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Ref": "FunctionsPrefix"
+                                    },
+                                    "DeliverConfigSnapshotFunction"
+                                ]
+                            ]
+                        },
+                        {
+                            "Ref": "AWS::NoValue"
+                        }
+                    ]
+                },
                 "Handler": "index.handler",
                 "Role": {
                     "Fn::GetAtt": [
@@ -719,7 +776,13 @@
                 "PolicyName": "CustomChecksExecutionPolicy",
                 "Roles": [
                     {
+                        "Ref": "CustomChecksDriverFunctionRole"
+                    },
+                    {
                         "Ref": "CustomChecksWorkerFunctionRole"
+                    },
+                    {
+                        "Ref": "CustomChecksLambdaSetupRole"
                     }
                 ],
                 "PolicyDocument": {
@@ -733,13 +796,51 @@
                                 "logs:CreateLogStream",
                                 "logs:PutLogEvents"
                             ],
-                            "Resource": "arn:aws:logs:*:*:*"
+                            "Resource": [
+                                {
+                                    "Fn::If": [
+                                        "HasFunctionsPrefix",
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:logs:*:*:log-group:/aws/lambda/",
+                                                    {
+                                                        "Ref": "FunctionsPrefix"
+                                                    },
+                                                    "*"
+                                                ]
+                                            ]
+                                        },
+                                        "arn:aws:logs:*:*:log-group:/aws/lambda/*"
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "HasFunctionsPrefix",
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:logs:*:*:log-group:/aws/lambda/",
+                                                    {
+                                                        "Ref": "FunctionsPrefix"
+                                                    },
+                                                    "*:log-stream:*"
+                                                ]
+                                            ]
+                                        },
+                                        "arn:aws:logs:*:*:log-group:/aws/lambda/*:log-stream:*"
+                                    ]
+                                }
+                            ]
                         }
                     ]
                 }
             },
             "DependsOn": [
-                "CustomChecksWorkerFunctionRole"
+                "CustomChecksWorkerFunctionRole",
+                "CustomChecksDriverFunctionRole"
             ]
         },
         "EnableCloudInsightScanning": {
@@ -756,19 +857,29 @@
                     "Statement": [
                         {
                             "Effect": "Allow",
-                            "Action": [
-                                "ec2:DescribeInstances",
-                                "ec2:DescribeInstanceAttribute",
-                                "ec2:ModifyInstanceAttribute",
-                                "ec2:DescribeSecurityGroups",
-                                "ec2:CreateSecurityGroup",
-                                "ec2:DeleteSecurityGroup",
-                                "ec2:AuthorizeSecurityGroupIngress",
-                                "ec2:RevokeSecurityGroupIngress",
-                                "ec2:RevokeSecurityGroupEgress",
-                                "ec2:CreateTags",
-                                "ec2:DeleteTags"
-                            ],
+                            "Action": {
+                                "Fn::If": [
+                                    "IsVpcScanningEnabled",
+                                    [
+                                        "ec2:DescribeInstances",
+                                        "ec2:DescribeInstanceAttribute",
+                                        "ec2:DescribeSecurityGroups",
+                                        "ec2:ModifyInstanceAttribute",
+                                        "ec2:CreateSecurityGroup",
+                                        "ec2:DeleteSecurityGroup",
+                                        "ec2:AuthorizeSecurityGroupIngress",
+                                        "ec2:RevokeSecurityGroupIngress",
+                                        "ec2:RevokeSecurityGroupEgress",
+                                        "ec2:CreateTags",
+                                        "ec2:DeleteTags"
+                                    ],
+                                    [
+                                        "ec2:DescribeInstances",
+                                        "ec2:DescribeInstanceAttribute",
+                                        "ec2:DescribeSecurityGroups"
+                                    ]
+                                ]
+                            },
                             "Resource": [
                                 "*"
                             ]
@@ -846,6 +957,25 @@
         "CreateCustomChecksWorkerFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
+                "FunctionName": {
+                    "Fn::If": [
+                        "HasFunctionsPrefix",
+                        {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Ref": "FunctionsPrefix"
+                                    },
+                                    "WorkerFunction"
+                                ]
+                            ]
+                        },
+                        {
+                            "Ref": "AWS::NoValue"
+                        }
+                    ]
+                },
                 "Handler": "worker.handler",
                 "Description": "Custom Checks Worker function.",
                 "Role": {
@@ -980,16 +1110,6 @@
                         {
                             "Effect": "Allow",
                             "Action": [
-                                "logs:DescribeLogStreams",
-                                "logs:CreateLogGroup",
-                                "logs:CreateLogStream",
-                                "logs:PutLogEvents"
-                            ],
-                            "Resource": "arn:aws:logs:*:*:*"
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": [
                                 "s3:GetObject",
                                 "s3:GetBucketLocation"
                             ],
@@ -1033,9 +1153,15 @@
                             ]
                         },
                         {
-                            "Effect": "Allow",
-                            "Action": "sts:AssumeRole",
-                            "Resource": "*"
+                            "Fn::If": [
+                                "HasS3AccessRoleARN",
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "sts:AssumeRole",
+                                    "Resource": {"Ref": "S3AccessRoleARN"}
+                                },
+                                {"Ref": "AWS::NoValue"}
+                            ]
                         }
                     ]
                 }
@@ -1047,6 +1173,25 @@
         "CreateCustomChecksDriverFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
+                "FunctionName": {
+                    "Fn::If": [
+                        "HasFunctionsPrefix",
+                        {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Ref": "FunctionsPrefix"
+                                    },
+                                    "DriverFunction"
+                                ]
+                            ]
+                        },
+                        {
+                            "Ref": "AWS::NoValue"
+                        }
+                    ]
+                },
                 "Handler": "driver.handler",
                 "Description": "Custom Checks Driver function.",
                 "Environment": {
