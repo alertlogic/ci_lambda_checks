@@ -149,7 +149,6 @@ var config = {
             "name": "awsConfigRules",
             "enabled": false,
             "mode": ["configurationItem", "snapshotEvent", "configRule"],
-            "supported": ["us-east-1"],
             "configuration": {
                 "resourceTypes": ["AWS::EC2::Subnet", "AWS::EC2::SecurityGroup", "AWS::EC2::Instance",
                                   "AWS::EC2::NetworkAcl", "AWS::EC2::RouteTable", "AWS::EC2::VPC",
@@ -209,13 +208,7 @@ var config = {
         "awsInspector": {
             "name": "awsInspector",
             "enabled": false,
-            "mode": ["scheduledEvent", "inspectorEvent"],
-            "supported": [
-                'us-east-1',
-                'us-west-2',
-                'eu-west-1',
-                'ap-northeast-1'
-            ]
+            "mode": ["scheduledEvent", "inspectorEvent"]
         }
     }
 };

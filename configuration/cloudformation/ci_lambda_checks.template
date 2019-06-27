@@ -79,7 +79,7 @@
         "CloudInsightCustomChecksLambdaPackageName": {
             "Description": "Object name containing Lambda package which implements CloudInsight Custom Checks.",
             "Type": "String",
-            "Default": "ci_lambda_checks-0.0.10.zip",
+            "Default": "ci_lambda_checks-0.0.11.zip",
             "MinLength": "5"
         }
     },
