@@ -1,4 +1,4 @@
-##Cloud Insight AWS Integrations    
+## Cloud Insight AWS Integrations    
 In addition to the AWS environment exposure assessment Cloud Insight provides, we provide an open source project that allows users to extend available Cloud Insight results.
 
 ```ci_lambda_checks``` is a 'node js'-based AWS Lambda project that evaluates changes to your environment, and then publishes exposures to the Cloud Insight product. 
@@ -142,11 +142,11 @@ Install the latest distribution of [Node](http://nodejs.org/) from [Distribution
 2. Execute the Lambda development environment installation script.  
 ```$ build/install.sh```  
 
-###Work in your environment   
+### Work in your environment   
 
 The [NPM](https://www.npmjs.org/) install process that you ran earlier installed some [Node](http://nodejs.org/) modules that make the Lambda framework much more helpful than simple code checkouts.  Starting the framework will enable real-time linting, as well as the artifact build system.
 
-##Build and deploy ```ci_lambda_checks``` to AWS  
+## Build and deploy ```ci_lambda_checks``` to AWS  
 You must have a valid account in Cloud Insight and have already set up a valid environment. In addition, you must correctly set up your your AWS Credentials for use with the AWS SDKs. Refer to [http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/set-up-creds.html](http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/set-up-creds.html).
 
 1. Run ```npm run build``` to create a versioned, distributable zipped artifacts and guides you through deployment process.  
