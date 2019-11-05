@@ -606,7 +606,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs8.10",
+                "Runtime": "nodejs10.x",
                 "Timeout": "60"
             }
         },
@@ -707,7 +707,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs8.10",
+                "Runtime": "nodejs10.x",
                 "Timeout": "60"
             },
             "DependsOn": [
@@ -1010,7 +1010,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs8.10",
+                "Runtime": "nodejs10.x",
                 "Timeout": "300"
             },
             "DependsOn": [
@@ -1292,7 +1292,7 @@
                         ]
                     }
                 },
-                "Runtime": "nodejs8.10",
+                "Runtime": "nodejs10.x",
                 "Timeout": "300"
             },
             "DependsOn": [
