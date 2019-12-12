@@ -130,7 +130,7 @@ function getAccountId(token) {
     "use strict";
     if ( !config.hasOwnProperty('accountId') ||
          config.accountId === "" ) {
-        config.accountId = JSON.parse(new Buffer(token.split(".")[1], 'base64')).account;
+        config.accountId = JSON.parse(Buffer.from(token.split(".")[1], 'base64')).account;
     }
     return config.accountId;
 }

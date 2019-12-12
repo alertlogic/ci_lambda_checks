@@ -79,7 +79,7 @@
         "CloudInsightCustomChecksLambdaPackageName": {
             "Description": "Object name containing Lambda package which implements CloudInsight Custom Checks.",
             "Type": "String",
-            "Default": "ci_lambda_checks-0.0.11.zip",
+            "Default": "ci_lambda_checks-0.0.12.zip",
             "MinLength": "5"
         }
     },
@@ -529,7 +529,7 @@
                                     "Ref": "AWS::Region"
                                 },
                                 "',\n",
-                                "   response = require('cfn-response'),\n",
+                                "   response = require('./cfn-response'),\n",
                                 "   AWS = require('aws-sdk');\n",
                                 "exports.handler = function(event, context) {\n",
                                 "   AWS.config.update({region: awsRegion});\n",
@@ -685,7 +685,7 @@
                                     "Ref": "AWS::Region"
                                 },
                                 "',\n",
-                                "    response = require('cfn-response'),\n",
+                                "    response = require('./cfn-response'),\n",
                                 "    AWS = require('aws-sdk');\n",
                                 "exports.handler = function(event, context) {\n",
                                 "    AWS.config.update({region: awsRegion});\n",
