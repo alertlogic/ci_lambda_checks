@@ -63,11 +63,11 @@ function format_multipart(parts, boundary) {
             'Content-Disposition: form-data; name="' + parts[i].name + '"' + crlf,
             'Content-Type: "' + parts[i].contentType+ '"' + crlf
         ];
-        res.push(new Buffer(delimiter));
-        res.push(new Buffer(headers.join('')));
-        res.push(new Buffer(crlf + parts[i].content + crlf));
+        res.push(Buffer.from(delimiter));
+        res.push(Buffer.from(headers.join('')));
+        res.push(Buffer.from(crlf + parts[i].content + crlf));
     }
-    res.push(new Buffer(closeDelimiter));
+    res.push(Buffer.from(closeDelimiter));
     return Buffer.concat(res);
 }
 

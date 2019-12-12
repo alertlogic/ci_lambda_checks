@@ -41,13 +41,13 @@ function getSecret(params, callback) {
         }
         var kms = new AWS.KMS({apiVersion: '2014-11-01'}),
             kmsParams = {
-                CiphertextBlob: new Buffer(data.Item.secret.S, 'base64')
+                CiphertextBlob: Buffer.from(data.Item.secret.S, 'base64')
             };
         kms.decrypt(kmsParams, function(err, result) {
             if (err) {
                 return callback(err);
             }
-            res = params.identifier + ':' + new Buffer(result.Plaintext).toString();
+            res = params.identifier + ':' + Buffer.from(result.Plaintext).toString();
             return callback(null, res); 
         });
     });

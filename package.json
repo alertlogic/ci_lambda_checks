@@ -18,17 +18,17 @@
     "type": "git",
     "url": "git@github.com:alertlogic/ci_lambda_checks.git"
   },
-  "version": "0.0.11",
+  "version": "0.0.12",
   "license": "MIT",
   "engines": {
     "node": "0.12.7"
   },
   "dependencies": {
     "async": "^1.4.2",
-    "lodash": "^4.17.2",
-    "npm": "^6.9.0",
+    "lodash": "^4.17.15",
+    "npm": "^6.13.3",
     "winston": "^1.1.2",
-    "winston-cloudwatch": "^0.6.1"
+    "winston-cloudwatch": "^2.3.0"
   },
   "folders": {
     "build": "target/",
@@ -37,14 +37,14 @@
   "devDependencies": {
     "aws-sdk": "^2.2.9",
     "glob": "^7.0.3",
-    "glob-all": "3.0.1",
-    "jasmine-node": "^1.14.5",
-    "jshint": "^2.8.0",
+    "glob-all": "^3.1.0",
+    "jasmine-node": "^3.0.0",
+    "jshint": "^2.10.3",
     "lazystream": "^0.1.0",
     "mkdirp": "^0.5.1",
     "ncp": "^2.0.0",
     "node-zip": "^1.1.1",
-    "onchange": "^2.4.0",
+    "onchange": "^6.1.0",
     "parallelshell": "^1.2.0",
     "process": "^0.11.1",
     "prompt": "^0.2.14",

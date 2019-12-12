@@ -331,7 +331,7 @@ function processSnapshot(args, message, resultCallback) {
         },
         function uncompress(response, callback) {
             console.log("Uncompressing config snapshot. Parameters: %s", JSON.stringify(args));
-            var data = new Buffer(response.Body);
+            var data = Buffer.from(response.Body);
             zlib.gunzip(data, function(err, decoded) {
                 callback(err, decoded && decoded.toString());
             });
